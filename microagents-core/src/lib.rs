@@ -1,4 +1,4 @@
-pub mod providers;
+pub mod agent;
 pub mod types;
 
 pub fn add(left: u64, right: u64) -> u64 {
