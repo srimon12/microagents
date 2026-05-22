@@ -7,13 +7,14 @@ use std::{
     sync::Arc,
 };
 
+use futures_util::StreamExt;
 use thiserror::Error;
 use ultrafast_models_sdk::{
     ChatRequest, Message, UltrafastClient,
     models::{Function, Tool},
 };
 
-use crate::types::{Agent, AgentError};
+use crate::types::{Agent, AgentError, AgentStream};
 
 pub const SKILLS_PATH: &str = ".agents/skills";
 
@@ -188,12 +189,12 @@ impl MicroAgent {
 
 #[async_trait::async_trait]
 impl Agent for MicroAgent {
-    async fn generate(mut self) -> Result<Message, AgentError> {
+    async fn generate(mut self) -> Result<AgentStream, AgentError> {
         self.init_client()?;
         if let Some(client) = self.client {
-            let result = client
+            let stream = client
                 .0
-                .chat_completion(ChatRequest {
+                .stream_chat_completion(ChatRequest {
                     model: self.main_model,
                     messages: self.history,
                     temperature: None,
@@ -208,9 +209,22 @@ impl Agent for MicroAgent {
                     stop: None,
                 })
                 .await?;
-            return Ok(result.choices[0].message.clone());
+            let mapped = stream.map(|item| item.map_err(AgentError::ClientInitFailed));
+            return Ok(Box::pin(mapped));
         }
 
         Err(AgentError::GenerationError)
+    }
+
+    async fn call_tool(self, _tool_name: &str, _tool_args: &str) -> Result<Message, AgentError> {
+        Err(AgentError::ToolCallError)
+    }
+
+    async fn resolve_skill(self, _skill_name: &str) -> Result<Message, AgentError> {
+        Err(AgentError::SkillResolutionError)
+    }
+
+    async fn run(self, _prompt: String) -> Result<(), AgentError> {
+        Err(AgentError::RunError)
     }
 }

@@ -1,7 +1,7 @@
-use std::env::VarError;
+use std::{env::VarError, pin::Pin};
 
 use thiserror::Error;
-use ultrafast_models_sdk::{ClientError, Message};
+use ultrafast_models_sdk::{ClientError, Message, models::StreamChunk};
 
 #[derive(Error, Debug)]
 pub enum AgentError {
@@ -19,9 +19,12 @@ pub enum AgentError {
     ApiKeyNotConfigured(#[from] VarError),
 }
 
+pub type StreamItem = Result<StreamChunk, AgentError>;
+pub type AgentStream = Pin<Box<dyn futures_core::Stream<Item = StreamItem> + Send>>;
+
 #[async_trait::async_trait]
 pub trait Agent {
-    async fn generate(mut self) -> Result<Message, AgentError>;
+    async fn generate(mut self) -> Result<AgentStream, AgentError>;
     async fn call_tool(self, tool_name: &str, tool_args: &str) -> Result<Message, AgentError>;
     async fn resolve_skill(self, skill_name: &str) -> Result<Message, AgentError>;
     async fn run(self, prompt: String) -> Result<(), AgentError>;
