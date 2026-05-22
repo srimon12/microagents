@@ -1,14 +1,23 @@
-use std::{fmt::Debug, path::Path, str::FromStr, sync::Arc};
+use std::{
+    collections::HashSet,
+    env::{self},
+    fmt::Debug,
+    path::Path,
+    str::FromStr,
+    sync::Arc,
+};
 
 use thiserror::Error;
 use ultrafast_models_sdk::{
-    ClientError, Message, UltrafastClient,
+    ChatRequest, Message, UltrafastClient,
     models::{Function, Tool},
 };
 
+use crate::types::{Agent, AgentError};
+
 pub const SKILLS_PATH: &str = ".agents/skills";
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum SupportedProvider {
     OpenAI,
     Anthropic,
@@ -16,7 +25,6 @@ pub enum SupportedProvider {
     Cohere,
     Ollama,
     Azure,
-    Bedrock,
     Groq,
 }
 
@@ -30,7 +38,6 @@ impl FromStr for SupportedProvider {
             "ollama" => Ok(Self::Ollama),
             "cohere" => Ok(Self::Cohere),
             "azure" => Ok(Self::Azure),
-            "bedrock" => Ok(Self::Bedrock),
             "groq" => Ok(Self::Groq),
             _ => Err(MicroAgentBuilderError::ProviderNotSupported(s.into())),
         }
@@ -43,8 +50,8 @@ pub enum MicroAgentBuilderError {
     SkillNotFound(String),
     #[error("Provider {0} not supported")]
     ProviderNotSupported(String),
-    #[error("Unable to initialize client")]
-    ClientInitFailed(#[from] ClientError),
+    #[error("Tool with name {0} already exists")]
+    ToolAlreadyDefined(String),
 }
 
 pub struct DebuggableClient(pub Arc<UltrafastClient>);
@@ -59,29 +66,31 @@ impl Debug for DebuggableClient {
 pub struct MicroAgent {
     pub history: Vec<Message>,
     pub tools: Vec<Tool>,
-    pub skills: Vec<String>,
-    pub providers: Vec<SupportedProvider>,
+    pub skills: HashSet<String>,
+    pub providers: HashSet<SupportedProvider>,
     pub main_model: String,
-    pub fallback_models: Vec<String>,
+    pub fallback_models: HashSet<String>,
     client: Option<DebuggableClient>,
 }
 
 pub struct MicroAgentBuilder {
     tools: Vec<Tool>,
-    skills: Vec<String>,
-    providers: Vec<SupportedProvider>,
+    skills: HashSet<String>,
+    providers: HashSet<SupportedProvider>,
     main_model: String,
-    fallback_models: Vec<String>,
+    fallback_models: HashSet<String>,
+    _tool_names: HashSet<String>,
 }
 
 impl MicroAgentBuilder {
     pub fn new() -> Self {
         Self {
             tools: vec![],
-            skills: vec![],
-            providers: vec![],
+            skills: HashSet::new(),
+            providers: HashSet::new(),
             main_model: String::new(),
-            fallback_models: vec![],
+            fallback_models: HashSet::new(),
+            _tool_names: HashSet::new(),
         }
     }
 
@@ -90,13 +99,13 @@ impl MicroAgentBuilder {
         if !path.exists() {
             return Err(MicroAgentBuilderError::SkillNotFound(skill_name));
         }
-        self.skills.push(skill_name);
+        self.skills.insert(skill_name);
         Ok(self)
     }
 
     pub fn add_provider(mut self, provider: String) -> Result<Self, MicroAgentBuilderError> {
         let prov = SupportedProvider::from_str(&provider)?;
-        self.providers.push(prov);
+        self.providers.insert(prov);
         Ok(self)
     }
 
@@ -106,7 +115,7 @@ impl MicroAgentBuilder {
     }
 
     pub fn add_fallback_model(mut self, model: String) -> Self {
-        self.fallback_models.push(model);
+        self.fallback_models.insert(model);
         self
     }
 
@@ -115,7 +124,11 @@ impl MicroAgentBuilder {
         name: String,
         description: String,
         parameters: serde_json::Value,
-    ) -> Self {
+    ) -> Result<Self, MicroAgentBuilderError> {
+        if self._tool_names.contains(&name) {
+            return Err(MicroAgentBuilderError::ToolAlreadyDefined(name));
+        }
+        self._tool_names.insert(name.clone());
         let tool = Tool {
             tool_type: "function".into(),
             function: Function {
@@ -125,7 +138,7 @@ impl MicroAgentBuilder {
             },
         };
         self.tools.push(tool);
-        self
+        Ok(self)
     }
 
     pub fn build(self) -> MicroAgent {
@@ -142,7 +155,62 @@ impl MicroAgentBuilder {
 }
 
 impl MicroAgent {
-    fn init_client() -> Result<(), MicroAgentBuilderError> {
+    fn init_client(&mut self) -> Result<(), AgentError> {
+        if self.client.is_some() {
+            return Ok(());
+        }
+        let mut base_client = UltrafastClient::standalone();
+        for provider in &self.providers {
+            base_client = match provider {
+                SupportedProvider::Anthropic => {
+                    base_client.with_anthropic(env::var("ANTHROPIC_API_KEY")?)
+                }
+                SupportedProvider::OpenAI => base_client.with_openai(env::var("OPENAI_API_KEY")?),
+                SupportedProvider::Azure => base_client.with_azure_openai(
+                    env::var("AZURE_OPENAI_API_KEY")?,
+                    env::var("AZURE_DEPLOYMENT_NAME")?,
+                ),
+                SupportedProvider::Groq => base_client.with_groq(env::var("GROQ_API_KEY")?),
+                SupportedProvider::Cohere => base_client.with_cohere(env::var("COHERE_API_KEY")?),
+                SupportedProvider::Mistral => {
+                    base_client.with_mistral(env::var("MISTRAL_API_KEY")?)
+                }
+                SupportedProvider::Ollama => base_client.with_ollama(
+                    env::var("OLLAMA_BASE_URL").unwrap_or("http://localhost:11434/api".to_string()),
+                ),
+            };
+        }
+        let client = base_client.build()?;
+        self.client = Some(DebuggableClient(Arc::new(client)));
         Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl Agent for MicroAgent {
+    async fn generate(mut self) -> Result<Message, AgentError> {
+        self.init_client()?;
+        if let Some(client) = self.client {
+            let result = client
+                .0
+                .chat_completion(ChatRequest {
+                    model: self.main_model,
+                    messages: self.history,
+                    temperature: None,
+                    stream: Some(true),
+                    max_tokens: None,
+                    tools: Some(self.tools),
+                    tool_choice: Some(ultrafast_models_sdk::models::ToolChoice::Auto),
+                    top_p: None,
+                    frequency_penalty: None,
+                    user: None,
+                    presence_penalty: None,
+                    stop: None,
+                })
+                .await?;
+            return Ok(result.choices[0].message.clone());
+        }
+
+        Err(AgentError::GenerationError)
     }
 }
