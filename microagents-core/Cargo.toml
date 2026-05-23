@@ -8,6 +8,7 @@ async-trait = "0.1.89"
 dirs = "6.0.0"
 futures-core = "0.3.32"
 futures-util = "0.3.32"
+jsonschema = "0.46.5"
 markdown-frontmatter = { version = "0.5.1", features = ["full"] }
 regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }

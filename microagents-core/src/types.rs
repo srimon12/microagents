@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 use ultrafast_models_sdk::{
-    ClientError, Message,
+    ClientError,
     models::{Function, StreamChunk, Tool},
 };
 
@@ -32,8 +32,7 @@ pub type GenerationStream = Pin<Box<dyn futures_core::Stream<Item = StreamItem> 
 #[async_trait::async_trait]
 pub trait Agent {
     async fn generate(mut self) -> Result<GenerationStream, AgentError>;
-    async fn call_tool(self, tool_name: &str, tool_args: &str) -> Result<Message, AgentError>;
-    async fn resolve_skill(self, skill_name: &str) -> Result<Message, AgentError>;
+    async fn call_tool(self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError>;
     async fn run(self, prompt: String) -> Result<(), AgentError>;
 }
 
@@ -59,23 +58,20 @@ impl From<ToolResult> for Value {
     }
 }
 
-impl ToolResult {
-    pub fn ok(result: String) -> Self {
-        Self::Ok(result)
-    }
-
-    pub fn err(error: String) -> Self {
-        Self::Err(error)
-    }
-}
-
+#[derive(Debug)]
 pub struct ToolExecutionContext<Ctx> {
     pub context: Ctx,
 }
 
 impl<Ctx> ToolExecutionContext<Ctx> {
     pub fn new(context: Ctx) -> Self {
-        return Self { context };
+        Self { context }
+    }
+}
+
+impl<Ctx: Default> Default for ToolExecutionContext<Ctx> {
+    fn default() -> Self {
+        Self::new(Ctx::default())
     }
 }
 

@@ -2,17 +2,19 @@ use std::{
     collections::HashMap,
     env::{self},
     fmt::{self, Debug},
+    fs,
     str::FromStr,
     sync::Arc,
 };
 
 use futures_util::StreamExt;
+use serde_json::{Value, json};
 use thiserror::Error;
 use ultrafast_models_sdk::{ChatRequest, Message, UltrafastClient, models::Tool};
 
 use crate::{
     skills::{self, ensure_skill, parse_skill},
-    types::{Agent, AgentError, GenerationStream, ToolFunction},
+    types::{Agent, AgentError, GenerationStream, ToolExecutionContext, ToolFunction, ToolResult},
 };
 
 pub const SKILLS_PATH: &str = ".agents/skills";
@@ -151,6 +153,8 @@ pub struct MicroAgent<Ctx> {
     pub model: String,
     pub system: String,
     client: Option<DebuggableClient>,
+    skills_cache: HashMap<String, String>,
+    pub tool_context: ToolExecutionContext<Ctx>,
 }
 
 pub struct MicroAgentBuilder<Ctx> {
@@ -159,16 +163,21 @@ pub struct MicroAgentBuilder<Ctx> {
     provider: SupportedProvider,
     model: String,
     custom_instructions: String,
+    tool_context: ToolExecutionContext<Ctx>,
 }
 
 impl<Ctx> MicroAgentBuilder<Ctx> {
-    pub fn new() -> Self {
+    pub fn new(tool_context: ToolExecutionContext<Ctx>) -> Self {
         Self {
-            tools: HashMap::new(),
+            tools: HashMap::from([(
+                "skills".to_string(),
+                Box::new(SkillsTool) as Box<dyn ToolFunction<Ctx>>,
+            )]),
             skills: HashMap::new(),
             provider: SupportedProvider::default(),
             model: String::new(),
             custom_instructions: String::new(),
+            tool_context,
         }
     }
 
@@ -256,7 +265,9 @@ You are {} provided by {}
             model: self.model,
             provider: self.provider,
             client: None,
+            skills_cache: HashMap::new(),
             system,
+            tool_context: self.tool_context,
         }
     }
 }
@@ -285,8 +296,58 @@ impl<Ctx> MicroAgent<Ctx> {
     }
 }
 
+#[derive(Debug)]
+pub struct SkillsTool;
+
 #[async_trait::async_trait]
-impl<Ctx> Agent for MicroAgent<Ctx> {
+impl<Ctx> ToolFunction<Ctx> for SkillsTool {
+    fn name(&self) -> String {
+        "skills".into()
+    }
+
+    fn description(&self) -> String {
+        "Call this tool to load a skill, providing the name of the skill you are invoking".into()
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        json!({
+          "type": "object",
+          "required": [
+            "skill_name"
+          ],
+          "properties": {
+            "skill_name": {
+              "type": "string",
+              "description": "Name of the skill to load"
+            }
+          }
+        })
+    }
+
+    async fn execute(
+        &self,
+        input: Value,
+        _ctx: &ToolExecutionContext<Ctx>,
+    ) -> Result<ToolResult, AgentError> {
+        let skill_name = input["skill_name"].as_str().unwrap();
+        let skill_path = ensure_skill(skill_name);
+        if let Some(p) = skill_path {
+            let content = fs::read_to_string(&p).map_err(|e| {
+                AgentError::ToolCallError(format!(
+                    "Skill {skill_name} could not be read: {}",
+                    e.to_string()
+                ))
+            })?;
+            return Ok(ToolResult::Ok(content));
+        }
+        Ok(ToolResult::Err(
+            "Skill {skill_name} could not found".to_string(),
+        ))
+    }
+}
+
+#[async_trait::async_trait]
+impl<Ctx: Send + Sync> Agent for MicroAgent<Ctx> {
     async fn generate(mut self) -> Result<GenerationStream, AgentError> {
         self.init_client()?;
         let tools: Vec<Tool> = self.tools.iter().map(|(_, t)| t.to_sdk_tool()).collect();
@@ -308,21 +369,27 @@ impl<Ctx> Agent for MicroAgent<Ctx> {
                     stop: None,
                 })
                 .await?;
-            let mapped = stream.map(|item| item.map_err(AgentError::ClientInitFailed));
+            let mapped =
+                stream.map(|item| item.map_err(|e| AgentError::GenerationError(e.to_string())));
             return Ok(Box::pin(mapped));
         }
 
         Err(AgentError::GenerationError("Client not available".into()))
     }
 
-    async fn call_tool(self, _tool_name: &str, _tool_args: &str) -> Result<Message, AgentError> {
+    async fn call_tool(self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError> {
+        let tool = self.tools.get(tool_name);
+        if let Some(t) = tool {
+            let val =
+                Value::from_str(tool_args).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+            jsonschema::validate(&t.input_schema(), &val)
+                .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+            let result = t.execute(val, &self.tool_context).await?;
+            return Ok(result);
+        }
         Err(AgentError::ToolCallError(
-            "Tool calling not available".into(),
+            "Tool {tool_name} not available".into(),
         ))
-    }
-
-    async fn resolve_skill(self, _skill_name: &str) -> Result<Message, AgentError> {
-        Err(AgentError::SkillResolutionError)
     }
 
     async fn run(self, _prompt: String) -> Result<(), AgentError> {
