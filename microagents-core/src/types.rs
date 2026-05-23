@@ -1,16 +1,23 @@
-use std::{env::VarError, pin::Pin};
+use std::{env::VarError, fmt::Debug, pin::Pin};
 
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value, json};
 use thiserror::Error;
-use ultrafast_models_sdk::{ClientError, Message, models::StreamChunk};
+use ultrafast_models_sdk::{
+    ClientError, Message,
+    models::{Function, StreamChunk, Tool},
+};
+
+const JSONRPC: &str = "2.0";
 
 #[derive(Error, Debug)]
 pub enum AgentError {
-    #[error("Generation failed")]
-    GenerationError,
+    #[error("Generation failed because of {0}")]
+    GenerationError(String),
     #[error("Skill resolution failed")]
     SkillResolutionError,
-    #[error("Tool call failed")]
-    ToolCallError,
+    #[error("Tool call failed because of {0}")]
+    ToolCallError(String),
     #[error("Run failure")]
     RunError,
     #[error("Unable to initialize client")]
@@ -20,12 +27,107 @@ pub enum AgentError {
 }
 
 pub type StreamItem = Result<StreamChunk, AgentError>;
-pub type AgentStream = Pin<Box<dyn futures_core::Stream<Item = StreamItem> + Send>>;
+pub type GenerationStream = Pin<Box<dyn futures_core::Stream<Item = StreamItem> + Send>>;
 
 #[async_trait::async_trait]
 pub trait Agent {
-    async fn generate(mut self) -> Result<AgentStream, AgentError>;
+    async fn generate(mut self) -> Result<GenerationStream, AgentError>;
     async fn call_tool(self, tool_name: &str, tool_args: &str) -> Result<Message, AgentError>;
     async fn resolve_skill(self, skill_name: &str) -> Result<Message, AgentError>;
     async fn run(self, prompt: String) -> Result<(), AgentError>;
+}
+
+pub enum ToolResult {
+    Ok(String),
+    Err(String),
+}
+
+impl From<ToolResult> for Value {
+    fn from(value: ToolResult) -> Self {
+        match value {
+            ToolResult::Ok(result) => Value::from(json!({
+                "success": true,
+                "result": result,
+                "error": Value::Null,
+            })),
+            ToolResult::Err(error) => Value::from(json!({
+                "success": false,
+                "result": Value::Null,
+                "error": error,
+            })),
+        }
+    }
+}
+
+impl ToolResult {
+    pub fn ok(result: String) -> Self {
+        Self::Ok(result)
+    }
+
+    pub fn err(error: String) -> Self {
+        Self::Err(error)
+    }
+}
+
+pub struct ToolExecutionContext<Ctx> {
+    pub context: Ctx,
+}
+
+impl<Ctx> ToolExecutionContext<Ctx> {
+    pub fn new(context: Ctx) -> Self {
+        return Self { context };
+    }
+}
+
+#[async_trait::async_trait]
+pub trait ToolFunction<Ctx>: Debug + Send + Sync {
+    fn name(&self) -> String;
+    fn description(&self) -> String;
+    fn input_schema(&self) -> Value;
+    async fn execute(
+        &self,
+        input: Value,
+        ctx: &ToolExecutionContext<Ctx>,
+    ) -> Result<ToolResult, AgentError>;
+    fn to_sdk_tool(&self) -> Tool {
+        Tool {
+            tool_type: "function".into(),
+            function: Function {
+                name: self.name(),
+                description: Some(self.description()),
+                parameters: self.input_schema(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonRpcNotification {
+    pub jsonrpc: String,
+    pub method: String,
+    pub params: Map<String, Value>,
+}
+
+impl JsonRpcNotification {
+    pub fn builder() -> Self {
+        Self {
+            jsonrpc: JSONRPC.into(),
+            method: String::new(),
+            params: Map::new(),
+        }
+    }
+
+    pub fn method(mut self, method: String) -> Self {
+        self.method = method;
+        self
+    }
+
+    pub fn add_param(mut self, key: String, value: Value) -> Self {
+        self.params.insert(key, value);
+        self
+    }
+}
+
+pub trait AgentEvent {
+    fn to_jsonrpc(self) -> JsonRpcNotification;
 }

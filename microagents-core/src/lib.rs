@@ -1,4 +1,6 @@
 pub mod agent;
+pub mod events;
+pub mod skills;
 pub mod types;
 
 pub fn add(left: u64, right: u64) -> u64 {
