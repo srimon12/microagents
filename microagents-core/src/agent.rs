@@ -8,13 +8,20 @@ use std::{
 };
 
 use futures_util::StreamExt;
+use microagents_events::types::ToolResult;
+use microagents_storage::{
+    jsonl::JsonlAgentStorage,
+    memory::InMemoryAgentStorage,
+    sqlite::SqliteAgentStorage,
+    types::{AgentStorage, AgentStorageChoice},
+};
 use serde_json::{Value, json};
 use thiserror::Error;
 use ultrafast_models_sdk::{ChatRequest, Message, UltrafastClient, models::Tool};
 
 use crate::{
     skills::{self, ensure_skill, parse_skill},
-    types::{Agent, AgentError, GenerationStream, ToolExecutionContext, ToolFunction, ToolResult},
+    types::{Agent, AgentError, GenerationStream, ToolExecutionContext, ToolFunction},
 };
 
 pub const SKILLS_PATH: &str = ".agents/skills";
@@ -153,8 +160,8 @@ pub struct MicroAgent<Ctx> {
     pub model: String,
     pub system: String,
     client: Option<DebuggableClient>,
-    skills_cache: HashMap<String, String>,
     pub tool_context: ToolExecutionContext<Ctx>,
+    pub storage: Box<dyn AgentStorage>,
 }
 
 pub struct MicroAgentBuilder<Ctx> {
@@ -164,6 +171,7 @@ pub struct MicroAgentBuilder<Ctx> {
     model: String,
     custom_instructions: String,
     tool_context: ToolExecutionContext<Ctx>,
+    pub storage: Box<dyn AgentStorage>,
 }
 
 impl<Ctx> MicroAgentBuilder<Ctx> {
@@ -178,6 +186,7 @@ impl<Ctx> MicroAgentBuilder<Ctx> {
             model: String::new(),
             custom_instructions: String::new(),
             tool_context,
+            storage: Box::new(InMemoryAgentStorage::default()) as Box<dyn AgentStorage>,
         }
     }
 
@@ -198,6 +207,16 @@ impl<Ctx> MicroAgentBuilder<Ctx> {
 
     pub fn model(mut self, model: String) -> Self {
         self.model = model;
+        self
+    }
+
+    pub fn storage(mut self, storage: AgentStorageChoice) -> Self {
+        match storage {
+            AgentStorageChoice::Jsonl => self.storage = Box::new(JsonlAgentStorage {}),
+            AgentStorageChoice::Memory => self.storage = Box::new(InMemoryAgentStorage::default()),
+            AgentStorageChoice::Sqlite => self.storage = Box::new(SqliteAgentStorage::default()),
+        }
+
         self
     }
 
@@ -265,9 +284,9 @@ You are {} provided by {}
             model: self.model,
             provider: self.provider,
             client: None,
-            skills_cache: HashMap::new(),
             system,
             tool_context: self.tool_context,
+            storage: self.storage,
         }
     }
 }

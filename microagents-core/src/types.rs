@@ -1,14 +1,12 @@
 use std::{env::VarError, fmt::Debug, pin::Pin};
 
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use microagents_events::types::ToolResult;
+use serde_json::Value;
 use thiserror::Error;
 use ultrafast_models_sdk::{
     ClientError,
     models::{Function, StreamChunk, Tool},
 };
-
-const JSONRPC: &str = "2.0";
 
 #[derive(Error, Debug)]
 pub enum AgentError {
@@ -34,28 +32,6 @@ pub trait Agent {
     async fn generate(mut self) -> Result<GenerationStream, AgentError>;
     async fn call_tool(self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError>;
     async fn run(self, prompt: String) -> Result<(), AgentError>;
-}
-
-pub enum ToolResult {
-    Ok(String),
-    Err(String),
-}
-
-impl From<ToolResult> for Value {
-    fn from(value: ToolResult) -> Self {
-        match value {
-            ToolResult::Ok(result) => Value::from(json!({
-                "success": true,
-                "result": result,
-                "error": Value::Null,
-            })),
-            ToolResult::Err(error) => Value::from(json!({
-                "success": false,
-                "result": Value::Null,
-                "error": error,
-            })),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -95,35 +71,4 @@ pub trait ToolFunction<Ctx>: Debug + Send + Sync {
             },
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JsonRpcNotification {
-    pub jsonrpc: String,
-    pub method: String,
-    pub params: Map<String, Value>,
-}
-
-impl JsonRpcNotification {
-    pub fn builder() -> Self {
-        Self {
-            jsonrpc: JSONRPC.into(),
-            method: String::new(),
-            params: Map::new(),
-        }
-    }
-
-    pub fn method(mut self, method: String) -> Self {
-        self.method = method;
-        self
-    }
-
-    pub fn add_param(mut self, key: String, value: Value) -> Self {
-        self.params.insert(key, value);
-        self
-    }
-}
-
-pub trait AgentEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification;
 }
