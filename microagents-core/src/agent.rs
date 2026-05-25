@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env::{self},
     fmt::{self, Debug},
     fs,
@@ -10,8 +10,8 @@ use std::{
 use async_stream::stream;
 use futures_util::StreamExt;
 use microagents_events::{
-    AgentEventAny, SessionInitEvent, SessionInitType, SessionStopEvent, UserPromptSubmitEvent,
-    types::ToolResult,
+    AgentEventAny, AssistantResponseEvent, DeltaType, SessionInitEvent, SessionInitType,
+    SessionStopEvent, StreamDeltaEvent, ToolResultEvent, UserPromptSubmitEvent, types::ToolResult,
 };
 use microagents_storage::{
     jsonl::JsonlAgentStorage,
@@ -21,10 +21,14 @@ use microagents_storage::{
 };
 use serde_json::{Value, json};
 use thiserror::Error;
-use ultrafast_models_sdk::{ChatRequest, Message, UltrafastClient, models::Tool};
+use tokio::{sync::Semaphore, task::JoinSet};
+use ultrafast_models_sdk::{
+    ChatRequest, Message, Role, UltrafastClient,
+    models::{Delta, FunctionCall, Tool, ToolCall},
+};
 
 use crate::{
-    common::convert_event_to_message,
+    common::{JsonResult, call_tool, convert_event_to_message, is_valid_json},
     skills::{self, ensure_skill, parse_skill},
     types::{Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction},
 };
@@ -159,39 +163,42 @@ impl Debug for DebuggableClient {
 #[derive(Debug)]
 pub struct MicroAgent<Ctx> {
     pub history: Vec<Message>,
-    pub tools: HashMap<String, Box<dyn ToolFunction<Ctx>>>,
+    pub tools: HashMap<String, Arc<dyn ToolFunction<Ctx>>>,
     pub skills: HashMap<String, String>,
     pub provider: SupportedProvider,
     pub model: String,
     pub system: String,
     client: Option<DebuggableClient>,
-    pub tool_context: ToolExecutionContext<Ctx>,
+    pub tool_context: Arc<ToolExecutionContext<Ctx>>,
     pub storage: Box<dyn AgentStorage>,
+    pub parallel_tool_calls: bool,
 }
 
 pub struct MicroAgentBuilder<Ctx> {
-    tools: HashMap<String, Box<dyn ToolFunction<Ctx>>>,
+    tools: HashMap<String, Arc<dyn ToolFunction<Ctx>>>,
     skills: HashMap<String, String>,
     provider: SupportedProvider,
     model: String,
     custom_instructions: String,
-    tool_context: ToolExecutionContext<Ctx>,
+    tool_context: Arc<ToolExecutionContext<Ctx>>,
     pub storage: Box<dyn AgentStorage>,
+    pub parallel_tool_calls: bool,
 }
 
-impl<Ctx> MicroAgentBuilder<Ctx> {
+impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     pub fn new(tool_context: ToolExecutionContext<Ctx>) -> Self {
         Self {
             tools: HashMap::from([(
                 "skills".to_string(),
-                Box::new(SkillsTool) as Box<dyn ToolFunction<Ctx>>,
+                Arc::new(SkillsTool) as Arc<dyn ToolFunction<Ctx>>,
             )]),
             skills: HashMap::new(),
             provider: SupportedProvider::default(),
             model: String::new(),
             custom_instructions: String::new(),
-            tool_context,
+            tool_context: Arc::new(tool_context),
             storage: Box::new(InMemoryAgentStorage::default()) as Box<dyn AgentStorage>,
+            parallel_tool_calls: false,
         }
     }
 
@@ -215,6 +222,11 @@ impl<Ctx> MicroAgentBuilder<Ctx> {
         self
     }
 
+    pub fn parallel_tool_calls(mut self, parallel_tool_calls: bool) -> Self {
+        self.parallel_tool_calls = parallel_tool_calls;
+        self
+    }
+
     pub fn storage(mut self, storage: AgentStorageChoice) -> Self {
         match storage {
             AgentStorageChoice::Jsonl => self.storage = Box::new(JsonlAgentStorage {}),
@@ -227,7 +239,7 @@ impl<Ctx> MicroAgentBuilder<Ctx> {
 
     pub fn add_tool(
         mut self,
-        tool: Box<dyn ToolFunction<Ctx>>,
+        tool: Arc<dyn ToolFunction<Ctx>>,
     ) -> Result<Self, MicroAgentBuilderError> {
         self.tools.insert(tool.name(), tool);
         Ok(self)
@@ -292,6 +304,7 @@ You are {} provided by {}
             system,
             tool_context: self.tool_context,
             storage: self.storage,
+            parallel_tool_calls: self.parallel_tool_calls,
         }
     }
 }
@@ -325,7 +338,7 @@ impl<Ctx> MicroAgent<Ctx> {
 pub struct SkillsTool;
 
 #[async_trait::async_trait]
-impl<Ctx> ToolFunction<Ctx> for SkillsTool {
+impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
     fn name(&self) -> String {
         "skills".into()
     }
@@ -352,7 +365,7 @@ impl<Ctx> ToolFunction<Ctx> for SkillsTool {
     async fn execute(
         &self,
         input: Value,
-        _ctx: &ToolExecutionContext<Ctx>,
+        _ctx: &Arc<ToolExecutionContext<Ctx>>,
     ) -> Result<ToolResult, AgentError> {
         let skill_name = input["skill_name"].as_str().unwrap();
         let skill_path = ensure_skill(skill_name);
@@ -397,26 +410,12 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
         return Ok(Box::pin(mapped));
     }
 
-    async fn call_tool(&self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError> {
-        let tool = self.tools.get(tool_name);
-        if let Some(t) = tool {
-            let val =
-                Value::from_str(tool_args).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
-            jsonschema::validate(&t.input_schema(), &val)
-                .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
-            let result = t.execute(val, &self.tool_context).await?;
-            return Ok(result);
-        }
-        Err(AgentError::ToolCallError(
-            "Tool {tool_name} not available".into(),
-        ))
-    }
-
     async fn run(
         mut self,
         prompt: String,
         session_id: Option<String>,
     ) -> Result<RunStream, AgentError> {
+        let local_tools: HashMap<String, Arc<dyn ToolFunction<Ctx>>> = self.tools.clone();
         let s: RunStream = Box::pin(stream! {
             let resolved_sid;
             let messages: Vec<Message> = if let Some(sid) = session_id {
@@ -483,7 +482,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
             let turn_id = uuid::Uuid::new_v4().to_string();
             let user_prompt_submit = AgentEventAny::UserPromptSubmit(UserPromptSubmitEvent {
                 session_id: resolved_sid.clone(),
-                turn_id,
+                turn_id: turn_id.clone(),
                 prompt,
             });
             match self.storage.update_session(user_prompt_submit.clone()).await {
@@ -494,33 +493,197 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 }
             };
             yield Ok(user_prompt_submit);
-            let mut generation = match self.generate().await {
-                Ok(g) => g,
-                Err(e) => {
-                    yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
-                    return;
-                }
-            };
-            for g in generation.next().await {
-                match g {
-                    Ok(r) => {},
+
+            loop {
+                let mut generation = match self.generate().await {
+                    Ok(g) => g,
                     Err(e) => {
-                        let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()) });
-                        match self.storage.update_session(stop_ev.clone()).await {
-                            Ok(_) => {},
-                            Err(e) => {
-                                yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
-                                return;
-                            }
-                        }
-                        yield Ok(stop_ev);
+                        yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
                         return;
                     }
+                };
+                let mut text = String::new();
+                let mut tool_messages: Vec<Message> = vec![];
+                let mut tool_calls: HashMap<String, (String, String)> = HashMap::new();
+                while let Some(g) = generation.next().await {
+                    match g {
+                        Ok(chunk) => {
+                            let mut deltas: Vec<(u32, Delta)> = vec![];
+                            for choice in chunk.choices {
+                                deltas.push((choice.index, choice.delta));
+                            }
+                            deltas.sort_by(|a, b| a.0.cmp(&b.0));
+                            for (_, delta) in deltas {
+                                if let Some(c) = delta.content {
+                                    text += &c;
+                                    let ev = AgentEventAny::StreamDelta(StreamDeltaEvent {
+                                        session_id: resolved_sid.clone(),
+                                        turn_id: turn_id.clone(),
+                                        delta: c,
+                                        delta_type: DeltaType::Text,
+                                    });
+                                    match self.storage.update_session(ev.clone()).await {
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e.to_string())));
+                                            return;
+                                        }
+                                    }
+                                    yield Ok(ev);
+                                }
+                                if let Some(tcs) = delta.tool_calls {
+                                    for tc in tcs {
+                                        if let Some(tid) = tc.id && let Some(func) = tc.function && let Some(name) = func.name {
+                                            if !tool_calls.contains_key(&tid) {
+                                                tool_calls.insert(tid, (name, func.arguments.unwrap_or_default()));
+                                            } else {
+                                                tool_calls.entry(tid).and_modify(|v| v.1 += &func.arguments.unwrap_or_default());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()) });
+                            match self.storage.update_session(stop_ev.clone()).await {
+                                Ok(_) => {},
+                                Err(e) => {
+                                    yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                                    return;
+                                }
+                            }
+                            yield Ok(stop_ev);
+                            return;
+                        }
+                    }
                 }
+
+                if tool_calls.is_empty() {
+                    let ev = AgentEventAny::AssistantResponse(AssistantResponseEvent {
+                        session_id: resolved_sid.clone(),
+                        turn_id: turn_id.clone(),
+                        full_text: text.clone(),
+                        tool_calls: Some(vec![]),
+                    });
+                    let stop_ev = AgentEventAny::SessionStop(SessionStopEvent {
+                        session_id: resolved_sid.clone(),
+                        success: true,
+                        result: Some(text),
+                        error: None,
+                    });
+                    match self.storage.update_session(ev.clone()).await {
+                        Ok(_) => {},
+                        Err(e) => {
+                            yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                            return;
+                        }
+                    }
+                    match self.storage.update_session(stop_ev.clone()).await {
+                        Ok(_) => {},
+                        Err(e) => {
+                            yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                            return;
+                        }
+                    }
+                    yield Ok(ev);
+                    yield Ok(stop_ev);
+                    return;
+                }
+
+                let mut to_pop = HashSet::new();
+                let mut to_call = JoinSet::new();
+                let tool_ctx = self.tool_context.clone();
+                let concurrency = if !self.parallel_tool_calls {
+                    1
+                } else {
+                    10
+                };
+                let semaphore = Arc::new(Semaphore::new(concurrency));
+                for (tid, (name, args)) in &tool_calls {
+                    match is_valid_json(args) {
+                        JsonResult::Valid(v) => {
+                            let tool = local_tools.get(name);
+                            if let Some(t) = tool {
+                                let permit_res = semaphore.clone().acquire_owned().await;
+                                let permit = match permit_res {
+                                    Ok(p) => p,
+                                    Err(e) => {
+                                        yield Err(AgentError::RunError(format!("Error while acquiring semaphore: {}", e.to_string())));
+                                        return;
+                                    }
+                                };
+                                let t = t.clone();
+                                let tool_call_id = tid.clone();
+                                let ctx = tool_ctx.clone();
+                                to_call.spawn(async move {
+                                    let _permit = permit;
+                                    let result = call_tool(t, v, ctx).await;
+                                    match result {
+                                        Ok(r) => Ok((tool_call_id, r)),
+                                        Err(e) => Err(e)
+                                    }
+                                });
+                            }
+                        },
+                        JsonResult::Incomplete => {},
+                        JsonResult::Malformed => {
+                            to_pop.insert(tid.clone());
+                        }
+                    }
+                }
+                while let Some(res) = to_call.join_next().await {
+                    match res {
+                        Ok(Ok((tid, tool_result))) => {
+                            let ev = AgentEventAny::ToolResult(ToolResultEvent {
+                                session_id: resolved_sid.clone(),
+                                turn_id: turn_id.clone(),
+                                result: tool_result.clone(),
+                                tool_call_id: tid.clone(),
+                            });
+                            match self.storage.update_session(ev.clone()).await {
+                                Ok(_) => {},
+                                Err(e) => {
+                                    yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e.to_string())));
+                                    return;
+                                }
+                            }
+                            yield Ok(ev);
+                            let content = match tool_result {
+                                ToolResult::Ok(r) => {
+                                    format!("Tool succeeded: {r}")
+                                },
+                                ToolResult::Err(r) => {
+                                    format!("Tool failed: {r}")
+                                }
+                            };
+                            tool_messages.push(Message { role: Role::User, content, name: None, tool_calls: None, tool_call_id: Some(tid) });
+                        }
+                        Ok(Err(e)) => {
+                            yield Err(AgentError::RunError(format!("Tool call failed: {}", e)));
+                        }
+                        Err(e) => {
+                            yield Err(AgentError::RunError(format!("Task join failed: {}", e)));
+                        }
+                    }
+                }
+
+                self.history.push(Message {
+                    role: Role::Assistant,
+                    content: text.clone(),
+                    name: None,
+                    tool_calls: Some(tool_calls.iter().map(|(id, (name, args))| ToolCall {
+                        call_type: "function".into(),
+                        id: id.clone(),
+                        function: FunctionCall {
+                            name: name.clone(),
+                            arguments: args.clone(),
+                        }
+                    }).collect()),
+                    tool_call_id: None,
+                });
+                self.history.extend(tool_messages);
             }
-
-
-            // generation stream should go here and yield more events (StreamEvent, AssistantResponse, ToolCall/ResultEvent)
         });
         Ok(s)
     }

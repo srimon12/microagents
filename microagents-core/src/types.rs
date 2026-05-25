@@ -1,4 +1,4 @@
-use std::{env::VarError, fmt::Debug, pin::Pin};
+use std::{env::VarError, fmt::Debug, pin::Pin, sync::Arc};
 
 use microagents_events::{AgentEventAny, types::ToolResult};
 use serde_json::Value;
@@ -36,7 +36,6 @@ pub type RunStream = Pin<Box<dyn futures_core::Stream<Item = RunStreamItem> + Se
 #[async_trait::async_trait]
 pub trait Agent: Send + Sync {
     async fn generate(&mut self) -> Result<GenerationStream, AgentError>;
-    async fn call_tool(&self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError>;
     async fn run(
         mut self,
         prompt: String,
@@ -69,7 +68,7 @@ pub trait ToolFunction<Ctx>: Debug + Send + Sync {
     async fn execute(
         &self,
         input: Value,
-        ctx: &ToolExecutionContext<Ctx>,
+        ctx: &Arc<ToolExecutionContext<Ctx>>,
     ) -> Result<ToolResult, AgentError>;
     fn to_sdk_tool(&self) -> Tool {
         Tool {

@@ -1,8 +1,13 @@
+use std::sync::Arc;
+
 use microagents_events::{AgentEventAny, types::ToolResult};
+use serde_json::Value;
 use ultrafast_models_sdk::{
     Message, Role,
     models::{FunctionCall, ToolCall},
 };
+
+use crate::types::{AgentError, ToolExecutionContext, ToolFunction};
 
 pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
     let message: Option<Message> = match event {
@@ -61,4 +66,34 @@ pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
     };
 
     message
+}
+
+pub enum JsonResult {
+    Valid(Value),
+    Incomplete,
+    Malformed,
+}
+
+pub fn is_valid_json(s: &str) -> JsonResult {
+    let v = serde_json::from_str::<Value>(s);
+    match v {
+        Ok(val) => JsonResult::Valid(val),
+        Err(e) => {
+            if e.is_eof() {
+                return JsonResult::Incomplete;
+            }
+            JsonResult::Malformed
+        }
+    }
+}
+
+pub async fn call_tool<Ctx: Send + Sync + 'static>(
+    tool: Arc<dyn ToolFunction<Ctx>>,
+    tool_args: Value,
+    tool_context: Arc<ToolExecutionContext<Ctx>>,
+) -> Result<ToolResult, AgentError> {
+    jsonschema::validate(&tool.input_schema(), &tool_args)
+        .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+    let result = tool.execute(tool_args, &tool_context).await?;
+    return Ok(result);
 }
