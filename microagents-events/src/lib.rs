@@ -2,9 +2,9 @@ pub mod types;
 
 use serde_json::Value;
 
-use std::convert::TryFrom;
+use std::{convert::TryFrom, str::FromStr};
 
-use crate::types::{AgentEvent, JsonRpcNotification, ToolResult};
+use crate::types::{AgentEvent, AgentEventError, JsonRpcNotification, ToolCall, ToolResult};
 
 /// Indicates whether a session is being started fresh or resumed.
 #[derive(Debug, Clone)]
@@ -20,6 +20,21 @@ impl From<SessionInitType> for Value {
         match value {
             SessionInitType::Start => Value::from("start"),
             SessionInitType::Resume => Value::from("resume"),
+        }
+    }
+}
+
+impl FromStr for SessionInitType {
+    type Err = AgentEventError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "start" => Ok(Self::Start),
+            "resume" => Ok(Self::Resume),
+            _ => Err(AgentEventError::InvalidFieldType(format!(
+                "No init type with message: {}",
+                s
+            ))),
         }
     }
 }
@@ -50,7 +65,7 @@ pub struct SessionInitEvent {
     pub provider: String,
     pub system: String,
     /// Either `'new'` or `'resume'`.
-    pub init_type: String,
+    pub init_type: SessionInitType,
 }
 
 /// Event emitted when a session stops.
@@ -95,6 +110,7 @@ pub struct ToolResultEvent {
     pub turn_id: String,
     /// Tool execution result. [`Value`] implements `From<ToolResult>`.
     pub result: ToolResult,
+    pub tool_call_id: String,
 }
 
 /// Event emitted when a skill is loaded.
@@ -110,8 +126,8 @@ pub struct SkillLoadEvent {
 pub struct AssistantResponseEvent {
     pub session_id: String,
     pub turn_id: String,
-    pub full_thinking: String,
     pub full_text: String,
+    pub tool_calls: Option<Vec<ToolCall>>,
 }
 
 impl AgentEvent for SessionInitEvent {
@@ -195,6 +211,7 @@ impl AgentEvent for ToolResultEvent {
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("turn_id".into(), Value::from(self.turn_id))
             .add_param("result".into(), Value::from(self.result))
+            .add_param("tool_call_id".into(), Value::from(self.tool_call_id))
     }
 
     fn session_id(self) -> String {
@@ -222,8 +239,8 @@ impl AgentEvent for AssistantResponseEvent {
             .method("assistant.response".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("turn_id".into(), Value::from(self.turn_id))
-            .add_param("full_thinking".into(), Value::from(self.full_thinking))
             .add_param("full_text".into(), Value::from(self.full_text))
+            .add_param("tool_calls".into(), Value::from(self.tool_calls))
     }
 
     fn session_id(self) -> String {
@@ -233,7 +250,7 @@ impl AgentEvent for AssistantResponseEvent {
 
 /// A sum type wrapping any agent event.
 #[derive(Debug, Clone)]
-pub enum AgenEventAny {
+pub enum AgentEventAny {
     SessionInit(SessionInitEvent),
     SessionStop(SessionStopEvent),
     StreamDelta(StreamDeltaEvent),
@@ -244,7 +261,7 @@ pub enum AgenEventAny {
     UserPromptSubmit(UserPromptSubmitEvent),
 }
 
-impl AgentEvent for AgenEventAny {
+impl AgentEvent for AgentEventAny {
     fn to_jsonrpc(self) -> JsonRpcNotification {
         match self {
             Self::SessionInit(s) => s.to_jsonrpc(),
@@ -272,32 +289,7 @@ impl AgentEvent for AgenEventAny {
     }
 }
 
-/// Errors that can occur when parsing a [`JsonRpcNotification`] into an [`AgenEventAny`].
-#[derive(Debug, Clone)]
-pub enum AgentEventError {
-    /// A required field was missing from the JSON-RPC params.
-    MissingField(String),
-    /// A field had an unexpected type.
-    InvalidFieldType(String),
-    /// The JSON-RPC method name is not recognized.
-    UnknownMethod(String),
-}
-
-impl std::fmt::Display for AgentEventError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AgentEventError::MissingField(field) => write!(f, "Missing required field: {}", field),
-            AgentEventError::InvalidFieldType(field) => {
-                write!(f, "Invalid type for field: {}", field)
-            }
-            AgentEventError::UnknownMethod(method) => write!(f, "Unknown method: {}", method),
-        }
-    }
-}
-
-impl std::error::Error for AgentEventError {}
-
-impl TryFrom<JsonRpcNotification> for AgenEventAny {
+impl TryFrom<JsonRpcNotification> for AgentEventAny {
     type Error = AgentEventError;
 
     fn try_from(value: JsonRpcNotification) -> Result<Self, Self::Error> {
@@ -338,9 +330,17 @@ impl TryFrom<JsonRpcNotification> for AgenEventAny {
                 init_type: value
                     .params
                     .get("init_type")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| AgentEventError::MissingField("init_type".to_string()))?
-                    .to_string(),
+                    .and_then(|v| {
+                        let init_type = match v.as_str() {
+                            Some(s) => match SessionInitType::from_str(s) {
+                                Ok(i) => Some(i),
+                                Err(_) => None,
+                            },
+                            None => None,
+                        };
+                        init_type
+                    })
+                    .ok_or_else(|| AgentEventError::MissingField("init_type".to_string()))?,
             })),
             "session.stop" => Ok(Self::SessionStop(SessionStopEvent {
                 session_id,
@@ -425,6 +425,12 @@ impl TryFrom<JsonRpcNotification> for AgenEventAny {
                     session_id,
                     turn_id,
                     result: tool_result,
+                    tool_call_id: value
+                        .params
+                        .get("tool_call_id")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| AgentEventError::MissingField("tool_call_id".to_string()))?
+                        .to_string(),
                 }))
             }
             "skill.load" => Ok(Self::SkillLoad(SkillLoadEvent {
@@ -440,18 +446,26 @@ impl TryFrom<JsonRpcNotification> for AgenEventAny {
             "assistant.response" => Ok(Self::AssistantResponse(AssistantResponseEvent {
                 session_id,
                 turn_id,
-                full_thinking: value
-                    .params
-                    .get("full_thinking")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| AgentEventError::MissingField("full_thinking".to_string()))?
-                    .to_string(),
                 full_text: value
                     .params
                     .get("full_text")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| AgentEventError::MissingField("full_text".to_string()))?
                     .to_string(),
+                tool_calls: Some(
+                    value
+                        .params
+                        .get("tool_calls")
+                        .and_then(|v| match v {
+                            Value::Array(arr) => arr
+                                .iter()
+                                .map(|a| ToolCall::try_from(a.clone()))
+                                .collect::<Result<Vec<_>, _>>()
+                                .ok(),
+                            _ => None,
+                        })
+                        .ok_or_else(|| AgentEventError::MissingField("tool_calls".to_string()))?,
+                ),
             })),
             method => Err(AgentEventError::UnknownMethod(method.to_string())),
         }

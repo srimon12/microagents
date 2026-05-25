@@ -7,8 +7,12 @@ use std::{
     sync::Arc,
 };
 
+use async_stream::stream;
 use futures_util::StreamExt;
-use microagents_events::types::ToolResult;
+use microagents_events::{
+    AgentEventAny, SessionInitEvent, SessionInitType, SessionStopEvent, UserPromptSubmitEvent,
+    types::ToolResult,
+};
 use microagents_storage::{
     jsonl::JsonlAgentStorage,
     memory::InMemoryAgentStorage,
@@ -20,8 +24,9 @@ use thiserror::Error;
 use ultrafast_models_sdk::{ChatRequest, Message, UltrafastClient, models::Tool};
 
 use crate::{
+    common::convert_event_to_message,
     skills::{self, ensure_skill, parse_skill},
-    types::{Agent, AgentError, GenerationStream, ToolExecutionContext, ToolFunction},
+    types::{Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction},
 };
 
 pub const SKILLS_PATH: &str = ".agents/skills";
@@ -292,9 +297,9 @@ You are {} provided by {}
 }
 
 impl<Ctx> MicroAgent<Ctx> {
-    fn init_client(&mut self) -> Result<(), AgentError> {
-        if self.client.is_some() {
-            return Ok(());
+    fn init_client(&mut self) -> Result<Arc<UltrafastClient>, AgentError> {
+        if let Some(c) = self.client.as_ref() {
+            return Ok(c.0.clone());
         }
         let mut base_client = UltrafastClient::standalone();
         base_client = match self.provider {
@@ -310,8 +315,9 @@ impl<Ctx> MicroAgent<Ctx> {
             ),
         };
         let client = base_client.build()?;
-        self.client = Some(DebuggableClient(Arc::new(client)));
-        Ok(())
+        let arcc = Arc::new(client);
+        self.client = Some(DebuggableClient(arcc.clone()));
+        Ok(arcc)
     }
 }
 
@@ -366,37 +372,32 @@ impl<Ctx> ToolFunction<Ctx> for SkillsTool {
 }
 
 #[async_trait::async_trait]
-impl<Ctx: Send + Sync> Agent for MicroAgent<Ctx> {
-    async fn generate(mut self) -> Result<GenerationStream, AgentError> {
-        self.init_client()?;
+impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
+    async fn generate(&mut self) -> Result<GenerationStream, AgentError> {
+        let client = self.init_client()?;
         let tools: Vec<Tool> = self.tools.iter().map(|(_, t)| t.to_sdk_tool()).collect();
-        if let Some(client) = self.client {
-            let stream = client
-                .0
-                .stream_chat_completion(ChatRequest {
-                    model: self.model,
-                    messages: self.history,
-                    temperature: None,
-                    stream: Some(true),
-                    max_tokens: None,
-                    tools: Some(tools),
-                    tool_choice: Some(ultrafast_models_sdk::models::ToolChoice::Auto),
-                    top_p: None,
-                    frequency_penalty: None,
-                    user: None,
-                    presence_penalty: None,
-                    stop: None,
-                })
-                .await?;
-            let mapped =
-                stream.map(|item| item.map_err(|e| AgentError::GenerationError(e.to_string())));
-            return Ok(Box::pin(mapped));
-        }
-
-        Err(AgentError::GenerationError("Client not available".into()))
+        let stream = client
+            .stream_chat_completion(ChatRequest {
+                model: self.model.clone(),
+                messages: self.history.clone(),
+                temperature: None,
+                stream: Some(true),
+                max_tokens: None,
+                tools: Some(tools),
+                tool_choice: Some(ultrafast_models_sdk::models::ToolChoice::Auto),
+                top_p: None,
+                frequency_penalty: None,
+                user: None,
+                presence_penalty: None,
+                stop: None,
+            })
+            .await?;
+        let mapped =
+            stream.map(|item| item.map_err(|e| AgentError::GenerationError(e.to_string())));
+        return Ok(Box::pin(mapped));
     }
 
-    async fn call_tool(self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError> {
+    async fn call_tool(&self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError> {
         let tool = self.tools.get(tool_name);
         if let Some(t) = tool {
             let val =
@@ -411,7 +412,116 @@ impl<Ctx: Send + Sync> Agent for MicroAgent<Ctx> {
         ))
     }
 
-    async fn run(self, _prompt: String) -> Result<(), AgentError> {
-        Err(AgentError::RunError)
+    async fn run(
+        mut self,
+        prompt: String,
+        session_id: Option<String>,
+    ) -> Result<RunStream, AgentError> {
+        let s: RunStream = Box::pin(stream! {
+            let resolved_sid;
+            let messages: Vec<Message> = if let Some(sid) = session_id {
+                let ev = AgentEventAny::SessionInit(SessionInitEvent {
+                    session_id: sid.clone(),
+                    model: self.model.clone(),
+                    system: self.system.clone(),
+                    provider: self.provider.to_string(),
+                    init_type: SessionInitType::Resume,
+                });
+                yield Ok(ev);
+
+                let events_res = self
+                    .storage
+                    .get_session(&sid)
+                    .await
+                    .map_err(|e| AgentError::SessionLoadError(e.to_string()));
+
+                let events = match events_res {
+                    Ok(e) => e,
+                    Err(e) => {
+                        yield Err(AgentError::RunError(format!("Error while getting the session: {}", e.to_string())));
+                        return;
+                    }
+                };
+
+                resolved_sid = sid;
+
+                events
+                    .iter()
+                    .map(|e| convert_event_to_message(e.clone()))
+                    .filter(|m| m.is_some())
+                    .map(|m| m.unwrap())
+                    .collect()
+            } else {
+                let sid = uuid::Uuid::new_v4().to_string();
+                let sint = SessionInitEvent {
+                    session_id: sid.clone(),
+                    model: self.model.clone(),
+                    system: self.system.clone(),
+                    provider: self.provider.to_string(),
+                    init_type: SessionInitType::Start,
+                };
+                resolved_sid = sid;
+                let ev = AgentEventAny::SessionInit(sint.clone());
+                match self.storage.create_session(sint).await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        yield Err(AgentError::RunError(format!("An error occurred while creating the session in the storage: {}", e.to_string())));
+                        return;
+                    }
+                }
+                yield Ok(ev);
+                vec![]
+            };
+            self.history = messages;
+            self.history.push(Message {
+                role: ultrafast_models_sdk::Role::User,
+                content: prompt.to_owned(),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            });
+            let turn_id = uuid::Uuid::new_v4().to_string();
+            let user_prompt_submit = AgentEventAny::UserPromptSubmit(UserPromptSubmitEvent {
+                session_id: resolved_sid.clone(),
+                turn_id,
+                prompt,
+            });
+            match self.storage.update_session(user_prompt_submit.clone()).await {
+                Ok(_) => {},
+                Err(e) => {
+                    yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e.to_string())));
+                    return;
+                }
+            };
+            yield Ok(user_prompt_submit);
+            let mut generation = match self.generate().await {
+                Ok(g) => g,
+                Err(e) => {
+                    yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                    return;
+                }
+            };
+            for g in generation.next().await {
+                match g {
+                    Ok(r) => {},
+                    Err(e) => {
+                        let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()) });
+                        match self.storage.update_session(stop_ev.clone()).await {
+                            Ok(_) => {},
+                            Err(e) => {
+                                yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                                return;
+                            }
+                        }
+                        yield Ok(stop_ev);
+                        return;
+                    }
+                }
+            }
+
+
+            // generation stream should go here and yield more events (StreamEvent, AssistantResponse, ToolCall/ResultEvent)
+        });
+        Ok(s)
     }
 }

@@ -1,6 +1,6 @@
 use std::{env::VarError, fmt::Debug, pin::Pin};
 
-use microagents_events::types::ToolResult;
+use microagents_events::{AgentEventAny, types::ToolResult};
 use serde_json::Value;
 use thiserror::Error;
 use ultrafast_models_sdk::{
@@ -16,22 +16,32 @@ pub enum AgentError {
     SkillResolutionError,
     #[error("Tool call failed because of {0}")]
     ToolCallError(String),
-    #[error("Run failure")]
-    RunError,
+    #[error("Run failure: {0}")]
+    RunError(String),
     #[error("Unable to initialize client")]
     ClientInitFailed(#[from] ClientError),
     #[error("API key not configured for provider")]
     ApiKeyNotConfigured(#[from] VarError),
+    #[error("Session load error: {0}")]
+    SessionLoadError(String),
+    #[error("Conversion error from agent event to message")]
+    EventConversionError,
 }
 
 pub type StreamItem = Result<StreamChunk, AgentError>;
 pub type GenerationStream = Pin<Box<dyn futures_core::Stream<Item = StreamItem> + Send>>;
+pub type RunStreamItem = Result<AgentEventAny, AgentError>;
+pub type RunStream = Pin<Box<dyn futures_core::Stream<Item = RunStreamItem> + Send>>;
 
 #[async_trait::async_trait]
-pub trait Agent {
-    async fn generate(mut self) -> Result<GenerationStream, AgentError>;
-    async fn call_tool(self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError>;
-    async fn run(self, prompt: String) -> Result<(), AgentError>;
+pub trait Agent: Send + Sync {
+    async fn generate(&mut self) -> Result<GenerationStream, AgentError>;
+    async fn call_tool(&self, tool_name: &str, tool_args: &str) -> Result<ToolResult, AgentError>;
+    async fn run(
+        mut self,
+        prompt: String,
+        session_id: Option<String>,
+    ) -> Result<RunStream, AgentError>;
 }
 
 #[derive(Debug)]

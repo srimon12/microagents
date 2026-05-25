@@ -5,7 +5,7 @@ use std::{
 };
 
 use microagents_events::{
-    AgenEventAny, SessionInitEvent,
+    AgentEventAny, SessionInitEvent,
     types::{AgentEvent, JsonRpcNotification},
 };
 use rusqlite::Connection;
@@ -89,7 +89,7 @@ impl AgentStorage for SqliteAgentStorage {
         Ok(())
     }
 
-    async fn update_session(&mut self, event: AgenEventAny) -> anyhow::Result<()> {
+    async fn update_session(&mut self, event: AgentEventAny) -> anyhow::Result<()> {
         self.ensure_table_and_idx()?;
         let conn_mu = self.get_connection()?;
         let conn = conn_mu.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -107,7 +107,7 @@ impl AgentStorage for SqliteAgentStorage {
         Ok(())
     }
 
-    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgenEventAny>> {
+    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
         self.ensure_table_and_idx()?;
         let conn_mu = self.get_connection()?;
         let conn = conn_mu.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -126,7 +126,7 @@ impl AgentStorage for SqliteAgentStorage {
         let mut events = vec![];
         for row in rows {
             let jrpc: JsonRpcNotification = serde_json::from_str(&row.payload)?;
-            let ev = AgenEventAny::try_from(jrpc)?;
+            let ev = AgentEventAny::try_from(jrpc)?;
             events.push(ev);
         }
         Ok(events)

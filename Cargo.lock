@@ -1138,6 +1138,7 @@ version = "0.1.0"
 name = "microagents-core"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "async-trait",
  "dirs",
  "futures-core",
@@ -1151,6 +1152,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "ultrafast-models-sdk",
+ "uuid",
 ]
 
 [[package]]

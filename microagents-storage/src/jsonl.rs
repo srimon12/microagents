@@ -1,6 +1,6 @@
 use fs2::FileExt;
 use microagents_events::types::{AgentEvent, JsonRpcNotification};
-use microagents_events::{AgenEventAny, SessionInitEvent};
+use microagents_events::{AgentEventAny, SessionInitEvent};
 use std::io::Read;
 use std::{
     fs::{self, OpenOptions},
@@ -50,7 +50,7 @@ impl AgentStorage for JsonlAgentStorage {
         Ok(())
     }
 
-    async fn update_session(&mut self, event: AgenEventAny) -> anyhow::Result<()> {
+    async fn update_session(&mut self, event: AgentEventAny) -> anyhow::Result<()> {
         self.ensure_sessions_dir()?;
         let mut file = OpenOptions::new()
             .create(true)
@@ -62,7 +62,7 @@ impl AgentStorage for JsonlAgentStorage {
         Ok(())
     }
 
-    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgenEventAny>> {
+    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
         self.ensure_sessions_dir()?;
         let mut file = OpenOptions::new()
             .read(true)
@@ -74,7 +74,7 @@ impl AgentStorage for JsonlAgentStorage {
         let mut events = vec![];
         for line in buf.lines() {
             let jsrpc: JsonRpcNotification = serde_json::from_str(line)?;
-            let event = AgenEventAny::try_from(jsrpc)?;
+            let event = AgentEventAny::try_from(jsrpc)?;
             events.push(event);
         }
 

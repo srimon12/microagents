@@ -17,3 +17,5 @@ thiserror = "2.0.18"
 ultrafast-models-sdk = {version = "0.1.6", features = ["openai", "anthropic", "groq", "mistral", "cohere", "azure", "bedrock", "standalone", "ollama"]}
 microagents-events = {path = "../microagents-events"}
 microagents-storage = {path = "../microagents-storage"}
+async-stream = "0.3.6"
+uuid = { version = "1.23.1", features = ["v4"] }

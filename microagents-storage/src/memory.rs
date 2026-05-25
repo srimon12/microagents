@@ -4,13 +4,13 @@ use std::{
     vec,
 };
 
-use microagents_events::{AgenEventAny, SessionInitEvent, types::AgentEvent};
+use microagents_events::{AgentEventAny, SessionInitEvent, types::AgentEvent};
 
 use crate::types::AgentStorage;
 
 #[derive(Debug)]
 pub struct InMemoryAgentStorage {
-    sessions: Arc<RwLock<HashMap<String, Vec<AgenEventAny>>>>,
+    sessions: Arc<RwLock<HashMap<String, Vec<AgentEventAny>>>>,
 }
 
 impl Default for InMemoryAgentStorage {
@@ -30,12 +30,12 @@ impl AgentStorage for InMemoryAgentStorage {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         sessions.insert(
             event.session_id.clone(),
-            vec![AgenEventAny::SessionInit(event)],
+            vec![AgentEventAny::SessionInit(event)],
         );
         Ok(())
     }
 
-    async fn update_session(&mut self, event: AgenEventAny) -> anyhow::Result<()> {
+    async fn update_session(&mut self, event: AgentEventAny) -> anyhow::Result<()> {
         let session_id = event.clone().session_id();
         let mut sessions = self
             .sessions
@@ -51,7 +51,7 @@ impl AgentStorage for InMemoryAgentStorage {
         ))
     }
 
-    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgenEventAny>> {
+    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
         let sessions = self
             .sessions
             .read()
