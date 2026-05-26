@@ -3,10 +3,7 @@ use std::{env::VarError, fmt::Debug, pin::Pin, sync::Arc};
 use microagents_events::{AgentEventAny, types::ToolResult};
 use serde_json::Value;
 use thiserror::Error;
-use ultrafast_models_sdk::{
-    ClientError,
-    models::{Function, StreamChunk, Tool},
-};
+use ultrafast_models_sdk::models::{Function, StreamChunk, Tool};
 
 #[derive(Error, Debug)]
 pub enum AgentError {
@@ -18,8 +15,8 @@ pub enum AgentError {
     ToolCallError(String),
     #[error("Run failure: {0}")]
     RunError(String),
-    #[error("Unable to initialize client")]
-    ClientInitFailed(#[from] ClientError),
+    #[error("Unable to initialize client: {0}")]
+    ClientInitFailed(String),
     #[error("API key not configured for provider")]
     ApiKeyNotConfigured(#[from] VarError),
     #[error("Session load error: {0}")]

@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+async-trait = "0.1.89"
+futures-core = "0.3.32"
+futures-util = "0.3.32"
+microagents-core = {path = "../microagents-core"}
+microagents-events = {path = "../microagents-events"}
+serde_json = "1.0.150"
+tokio = { version = "1.52.3", features = ["full"] }

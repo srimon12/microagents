@@ -5,6 +5,7 @@ use std::{
     fs,
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use async_stream::stream;
@@ -24,6 +25,7 @@ use thiserror::Error;
 use tokio::{sync::Semaphore, task::JoinSet};
 use ultrafast_models_sdk::{
     ChatRequest, Message, Role, UltrafastClient,
+    cache::{CacheConfig, CacheType},
     models::{Delta, FunctionCall, Tool, ToolCall},
 };
 
@@ -73,9 +75,7 @@ seems compelling enough for the task at hand.
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum SupportedProvider {
     OpenAI,
-    Anthropic,
-    Mistral,
-    Cohere,
+    OpenRouter,
     Ollama,
     Groq,
 }
@@ -85,10 +85,8 @@ impl FromStr for SupportedProvider {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "openai" => Ok(Self::OpenAI),
-            "anthropic" => Ok(Self::Anthropic),
-            "mistral" => Ok(Self::Mistral),
+            "openrouter" => Ok(Self::OpenRouter),
             "ollama" => Ok(Self::Ollama),
-            "cohere" => Ok(Self::Cohere),
             "groq" => Ok(Self::Groq),
             _ => Err(MicroAgentBuilderError::ProviderNotSupported(s.into())),
         }
@@ -98,10 +96,8 @@ impl FromStr for SupportedProvider {
 impl fmt::Display for SupportedProvider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Self::Anthropic => "anthropic",
-            Self::Cohere => "cohere",
+            Self::OpenRouter => "openrouter",
             Self::Groq => "groq",
-            Self::Mistral => "mistral",
             Self::Ollama => "ollama",
             Self::OpenAI => "openai",
         };
@@ -111,31 +107,24 @@ impl fmt::Display for SupportedProvider {
 
 impl Default for SupportedProvider {
     fn default() -> Self {
-        SupportedProvider::Anthropic
+        SupportedProvider::OpenAI
     }
 }
 
 impl SupportedProvider {
     pub fn default_model(&self) -> &'static str {
         match self {
-            // Best balance of capability and cost for most workloads
-            SupportedProvider::Anthropic => "claude-sonnet-4-6",
-
             // GPT-5.5 is the current default ChatGPT model as of May 2026
             SupportedProvider::OpenAI => "gpt-5.5",
-
-            // mistral-large-latest always points to the current flagship (2512 as of now)
-            // Most reliable for function calling per Mistral's own docs
-            SupportedProvider::Mistral => "mistral-large-latest",
-
-            // Command A+ just released (May 2026), their most capable model
-            SupportedProvider::Cohere => "command-a-plus-05-2026",
 
             // llama3.2 is the most widely tested, hardware-friendly default
             SupportedProvider::Ollama => "llama3.2",
 
             // llama-3.3-70b-versatile is Groq's documented default recommendation
             SupportedProvider::Groq => "llama-3.3-70b-versatile",
+
+            // Claude Opus 4.7 by Anthropic is cuttig-edge in the models market
+            SupportedProvider::OpenRouter => "anthropic/claude-opus-4.7",
         }
     }
 }
@@ -271,9 +260,10 @@ You are {} provided by {}
             base += "\n<tools>";
             for (k, v) in &self.tools {
                 base += &format!(
-                    "\n<tool>\n<name>{}</name>\n<description>{}</description>\n</tool>",
+                    "\n<tool>\n<name>{}</name>\n<description>{}</description>\n<input_schema>{}</input_schema>\n</tool>",
                     k,
-                    v.description()
+                    v.description(),
+                    v.input_schema()
                 )
             }
             base += "\n</tools>"
@@ -316,18 +306,25 @@ impl<Ctx> MicroAgent<Ctx> {
         }
         let mut base_client = UltrafastClient::standalone();
         base_client = match self.provider {
-            SupportedProvider::Anthropic => {
-                base_client.with_anthropic(env::var("ANTHROPIC_API_KEY")?)
+            SupportedProvider::OpenRouter => {
+                base_client.with_openrouter(env::var("OPENROUTER_API_KEY")?)
             }
             SupportedProvider::OpenAI => base_client.with_openai(env::var("OPENAI_API_KEY")?),
             SupportedProvider::Groq => base_client.with_groq(env::var("GROQ_API_KEY")?),
-            SupportedProvider::Cohere => base_client.with_cohere(env::var("COHERE_API_KEY")?),
-            SupportedProvider::Mistral => base_client.with_mistral(env::var("MISTRAL_API_KEY")?),
             SupportedProvider::Ollama => base_client.with_ollama(
                 env::var("OLLAMA_BASE_URL").unwrap_or("http://localhost:11434/api".to_string()),
             ),
         };
-        let client = base_client.build()?;
+        let client = base_client
+            .with_routing_strategy(ultrafast_models_sdk::RoutingStrategy::Single)
+            .with_cache(CacheConfig {
+                enabled: true,
+                ttl: Duration::from_secs(600),
+                max_size: 1000,
+                cache_type: CacheType::InMemory,
+            })
+            .build()
+            .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
         let arcc = Arc::new(client);
         self.client = Some(DebuggableClient(arcc.clone()));
         Ok(arcc)
@@ -404,7 +401,8 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 presence_penalty: None,
                 stop: None,
             })
-            .await?;
+            .await
+            .map_err(|e| AgentError::GenerationError(e.to_string()))?;
         let mapped =
             stream.map(|item| item.map_err(|e| AgentError::GenerationError(e.to_string())));
         return Ok(Box::pin(mapped));
@@ -472,8 +470,9 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 vec![]
             };
             self.history = messages;
+            self.history.insert(0, Message { role: Role::System, content: self.system.clone(), name: None, tool_calls: None, tool_call_id: None });
             self.history.push(Message {
-                role: ultrafast_models_sdk::Role::User,
+                role: Role::User,
                 content: prompt.to_owned(),
                 name: None,
                 tool_calls: None,
@@ -504,7 +503,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 };
                 let mut text = String::new();
                 let mut tool_messages: Vec<Message> = vec![];
-                let mut tool_calls: HashMap<String, (String, String)> = HashMap::new();
+                let mut tool_calls: HashMap<u32, (String, String, String)> = HashMap::new();
                 while let Some(g) = generation.next().await {
                     match g {
                         Ok(chunk) => {
@@ -533,11 +532,14 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                 }
                                 if let Some(tcs) = delta.tool_calls {
                                     for tc in tcs {
-                                        if let Some(tid) = tc.id && let Some(func) = tc.function && let Some(name) = func.name {
-                                            if !tool_calls.contains_key(&tid) {
-                                                tool_calls.insert(tid, (name, func.arguments.unwrap_or_default()));
-                                            } else {
-                                                tool_calls.entry(tid).and_modify(|v| v.1 += &func.arguments.unwrap_or_default());
+                                        if let Some(func) = tc.function {
+                                            if let Some(tid) = tc.id && let Some(name) = func.name {
+                                                // First chunk with id and name: initialize entry
+                                                tool_calls.entry(tc.index).or_insert((tid, name, String::new()));
+                                            }
+                                            // Accumulate arguments regardless
+                                            if let Some(args) = func.arguments {
+                                                tool_calls.entry(tc.index).and_modify(|v| v.2 += &args);
                                             }
                                         }
                                     }
@@ -564,7 +566,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                         session_id: resolved_sid.clone(),
                         turn_id: turn_id.clone(),
                         full_text: text.clone(),
-                        tool_calls: Some(vec![]),
+                        tool_calls: None,
                     });
                     let stop_ev = AgentEventAny::SessionStop(SessionStopEvent {
                         session_id: resolved_sid.clone(),
@@ -600,7 +602,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                     10
                 };
                 let semaphore = Arc::new(Semaphore::new(concurrency));
-                for (tid, (name, args)) in &tool_calls {
+                for (_, (tid, name, args)) in &tool_calls {
                     match is_valid_json(args) {
                         JsonResult::Valid(v) => {
                             let tool = local_tools.get(name);
@@ -657,7 +659,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                     format!("Tool failed: {r}")
                                 }
                             };
-                            tool_messages.push(Message { role: Role::User, content, name: None, tool_calls: None, tool_call_id: Some(tid) });
+                            tool_messages.push(Message { role: Role::Tool, content, name: None, tool_calls: None, tool_call_id: Some(tid) });
                         }
                         Ok(Err(e)) => {
                             yield Err(AgentError::RunError(format!("Tool call failed: {}", e)));
@@ -672,9 +674,9 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                     role: Role::Assistant,
                     content: text.clone(),
                     name: None,
-                    tool_calls: Some(tool_calls.iter().map(|(id, (name, args))| ToolCall {
+                    tool_calls: Some(tool_calls.iter().map(|(_, (tid, name, args))| ToolCall {
                         call_type: "function".into(),
-                        id: id.clone(),
+                        id: tid.clone(),
                         function: FunctionCall {
                             name: name.clone(),
                             arguments: args.clone(),

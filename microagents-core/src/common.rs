@@ -55,7 +55,7 @@ pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
                 ToolResult::Err(r) => format!("Tool call failed: {}", r),
             };
             Some(Message {
-                role: Role::User,
+                role: Role::Tool,
                 content: result,
                 name: None,
                 tool_calls: None,
