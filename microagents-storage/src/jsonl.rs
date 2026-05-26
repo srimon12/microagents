@@ -42,7 +42,7 @@ impl AgentStorage for JsonlAgentStorage {
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(jsonl_session_storage().join(&event.session_id))?;
+            .open(jsonl_session_storage().join(&format!("{}.jsonl", &event.session_id)))?;
         let event_json = serde_json::to_string(&event.to_jsonrpc())?;
         file.lock_exclusive()?;
         writeln!(file, "{}", event_json)?;
@@ -52,10 +52,9 @@ impl AgentStorage for JsonlAgentStorage {
 
     async fn update_session(&mut self, event: AgentEventAny) -> anyhow::Result<()> {
         self.ensure_sessions_dir()?;
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(jsonl_session_storage().join(&event.clone().session_id()))?;
+        let mut file = OpenOptions::new().create(true).append(true).open(
+            jsonl_session_storage().join(&format!("{}.jsonl", &event.clone().session_id())),
+        )?;
         file.lock_exclusive()?;
         writeln!(file, "{}", serde_json::to_string(&event.to_jsonrpc())?)?;
         file.unlock()?;
@@ -66,7 +65,7 @@ impl AgentStorage for JsonlAgentStorage {
         self.ensure_sessions_dir()?;
         let mut file = OpenOptions::new()
             .read(true)
-            .open(jsonl_session_storage().join(session_id))?;
+            .open(jsonl_session_storage().join(&format!("{session_id}.jsonl")))?;
         file.lock_shared()?;
         let mut buf = String::new();
         file.read_to_string(&mut buf)?;

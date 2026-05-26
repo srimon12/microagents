@@ -138,6 +138,7 @@ impl AgentEvent for SessionInitEvent {
             .add_param("system".into(), Value::from(self.system))
             .add_param("model".into(), Value::from(self.model))
             .add_param("provider".into(), Value::from(self.provider))
+            .add_param("init_type".into(), Value::from(self.init_type))
     }
 
     fn session_id(self) -> String {
@@ -403,18 +404,18 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
             "tool.result" => {
                 let success = value
                     .params
-                    .get("success")
-                    .and_then(|v| v.as_bool())
+                    .get("result")
+                    .and_then(|v| v["success"].as_bool())
                     .ok_or_else(|| AgentEventError::InvalidFieldType("success".to_string()))?;
                 let result = value
                     .params
                     .get("result")
-                    .and_then(|v| v.as_str())
+                    .and_then(|v| v["result"].as_str())
                     .map(|s| s.to_string());
                 let error = value
                     .params
-                    .get("error")
-                    .and_then(|v| v.as_str())
+                    .get("result")
+                    .and_then(|v| v["error"].as_str())
                     .map(|s| s.to_string());
                 let tool_result = if success {
                     ToolResult::Ok(result.unwrap_or_default())
@@ -443,30 +444,27 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     .ok_or_else(|| AgentEventError::MissingField("skill_name".to_string()))?
                     .to_string(),
             })),
-            "assistant.response" => Ok(Self::AssistantResponse(AssistantResponseEvent {
-                session_id,
-                turn_id,
-                full_text: value
-                    .params
-                    .get("full_text")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| AgentEventError::MissingField("full_text".to_string()))?
-                    .to_string(),
-                tool_calls: Some(
-                    value
+            "assistant.response" => {
+                let tool_calls = value.params.get("tool_calls").and_then(|v| match v {
+                    Value::Array(arr) => arr
+                        .iter()
+                        .map(|a| ToolCall::try_from(a.clone()))
+                        .collect::<Result<Vec<_>, _>>()
+                        .ok(),
+                    _ => None,
+                });
+                Ok(Self::AssistantResponse(AssistantResponseEvent {
+                    session_id,
+                    turn_id,
+                    full_text: value
                         .params
-                        .get("tool_calls")
-                        .and_then(|v| match v {
-                            Value::Array(arr) => arr
-                                .iter()
-                                .map(|a| ToolCall::try_from(a.clone()))
-                                .collect::<Result<Vec<_>, _>>()
-                                .ok(),
-                            _ => None,
-                        })
-                        .ok_or_else(|| AgentEventError::MissingField("tool_calls".to_string()))?,
-                ),
-            })),
+                        .get("full_text")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| AgentEventError::MissingField("full_text".to_string()))?
+                        .to_string(),
+                    tool_calls: tool_calls,
+                }))
+            }
             method => Err(AgentEventError::UnknownMethod(method.to_string())),
         }
     }

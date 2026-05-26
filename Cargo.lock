@@ -1139,6 +1139,7 @@ dependencies = [
  "futures-util",
  "microagents-core",
  "microagents-events",
+ "microagents-storage",
  "serde_json",
  "tokio",
 ]

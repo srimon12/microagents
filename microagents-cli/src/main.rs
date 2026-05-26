@@ -4,6 +4,7 @@ use microagents_core::{
     types::{Agent, AgentError, ToolExecutionContext, ToolFunction},
 };
 use microagents_events::types::{AgentEvent, ToolResult};
+use microagents_storage::types::AgentStorageChoice;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -57,6 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()))
         .model("anthropic/claude-opus-4.7".into())
         .provider("openrouter".into())?
+        .storage(AgentStorageChoice::Jsonl)
         .custom_instructions("Always use the weather_tool to get the weather of a location".into())
         .add_tool(Arc::new(WeatherTool))?
         .build();
