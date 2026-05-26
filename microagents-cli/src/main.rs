@@ -1,12 +1,15 @@
-use futures_util::StreamExt;
 use microagents_core::{
     agent::MicroAgentBuilder,
     types::{Agent, AgentError, ToolExecutionContext, ToolFunction},
 };
-use microagents_events::types::{AgentEvent, ToolResult};
+use microagents_events::types::ToolResult;
 use microagents_storage::types::AgentStorageChoice;
 use serde_json::{Value, json};
 use std::sync::Arc;
+
+mod init_env;
+mod tools;
+mod tui;
 
 #[derive(Debug)]
 struct WeatherTool;
@@ -53,33 +56,26 @@ impl ToolFunction<()> for WeatherTool {
     }
 }
 
+fn build_agent() -> Result<microagents_core::agent::MicroAgent<()>, AgentError> {
+    Ok(MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()))
+        .model("anthropic/claude-opus-4.7".into())
+        .provider("openrouter".into())
+        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
+        .storage(AgentStorageChoice::Jsonl)
+        .custom_instructions(
+            "Always use the weather_tool to get the weather of a location".into(),
+        )
+        .add_tool(Arc::new(WeatherTool))
+        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
+        .build())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let agent = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()))
-        .model("anthropic/claude-opus-4.7".into())
-        .provider("openrouter".into())?
-        .storage(AgentStorageChoice::Jsonl)
-        .custom_instructions("Always use the weather_tool to get the weather of a location".into())
-        .add_tool(Arc::new(WeatherTool))?
-        .build();
-    let mut run = agent
-        .run(
-            "What is the weather in San Francisco? Call the weather_tool to see".into(),
-            None,
-        )
-        .await?;
-    while let Some(event) = run.next().await {
-        match event {
-            Ok(agent_event) => {
-                let json_rpc = agent_event.to_jsonrpc();
-                let s = serde_json::to_string(&json_rpc)?;
-                println!("{}", s);
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                break;
-            }
-        }
-    }
+    tui::run(|prompt, session_id| async move {
+        let agent = build_agent()?;
+        agent.run(prompt, session_id).await
+    })
+    .await?;
     Ok(())
 }

@@ -12,7 +12,8 @@ use async_stream::stream;
 use futures_util::StreamExt;
 use microagents_events::{
     AgentEventAny, AssistantResponseEvent, DeltaType, SessionInitEvent, SessionInitType,
-    SessionStopEvent, StreamDeltaEvent, ToolResultEvent, UserPromptSubmitEvent, types::ToolResult,
+    SessionStopEvent, SkillLoadEvent, StreamDeltaEvent, ToolCallEvent, ToolResultEvent,
+    UserPromptSubmitEvent, types::ToolResult,
 };
 use microagents_storage::{
     jsonl::JsonlAgentStorage,
@@ -36,6 +37,7 @@ use crate::{
 };
 
 pub const SKILLS_PATH: &str = ".agents/skills";
+pub const SKILLS_TOOL_NAME: &str = "skills";
 pub const GLOBAL_SKILLS_PATH: &str = "~/.agents/skills";
 pub const BASE_SYSTEM_PROMPT: &str = r#"<identity>
 You are MicroAgent, an AI agent whose purpose is to
@@ -337,7 +339,7 @@ pub struct SkillsTool;
 #[async_trait::async_trait]
 impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
     fn name(&self) -> String {
-        "skills".into()
+        SKILLS_TOOL_NAME.into()
     }
 
     fn description(&self) -> String {
@@ -607,6 +609,29 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                         JsonResult::Valid(v) => {
                             let tool = local_tools.get(name);
                             if let Some(t) = tool {
+                                let tool_name = name.clone();
+                                let tc_ev = if tool_name != SKILLS_TOOL_NAME {
+                                    AgentEventAny::ToolCall(ToolCallEvent {
+                                        session_id: resolved_sid.clone(),
+                                        turn_id: turn_id.clone(),
+                                        name: tool_name,
+                                        input: v.clone(),
+                                    })
+                                } else {
+                                    AgentEventAny::SkillLoad(SkillLoadEvent {
+                                        session_id: resolved_sid.clone(),
+                                        turn_id: turn_id.clone(),
+                                        skill_name: v["skill_name"].as_str().unwrap_or_default().to_string(),
+                                    })
+                                };
+                                match self.storage.update_session(tc_ev.clone()).await {
+                                    Ok(_) => {},
+                                    Err(e) => {
+                                        yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e.to_string())));
+                                        return;
+                                    }
+                                }
+                                yield Ok(tc_ev);
                                 let permit_res = semaphore.clone().acquire_owned().await;
                                 let permit = match permit_res {
                                     Ok(p) => p,

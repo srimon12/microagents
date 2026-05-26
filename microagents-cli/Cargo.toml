@@ -7,8 +7,13 @@ edition = "2024"
 async-trait = "0.1.89"
 futures-core = "0.3.32"
 futures-util = "0.3.32"
+liteparse = "2.0.1"
 microagents-core = {path = "../microagents-core"}
 microagents-events = {path = "../microagents-events"}
 microagents-storage = {path = "../microagents-storage"}
+model2vec-rs = "0.2.1"
+qdrant-edge = "0.6.1"
+ratatui = {version = "0.30.0", features = ["serde", "palette"]}
 serde_json = "1.0.150"
 tokio = { version = "1.52.3", features = ["full"] }
+ignore = "0.4.25"
