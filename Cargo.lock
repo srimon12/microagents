@@ -805,6 +805,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "chunk"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "113e21f5963090d0191da9d051fd35d93bc771054bf985f386e31a63cba719f9"
+dependencies = [
+ "daggrs",
+ "memchr",
+]
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1136,6 +1146,12 @@ name = "daachorse"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f55d7153ba3b507595872a3874803f07a8a81d1e888abed8e5db7da0597d6e2"
+
+[[package]]
+name = "daggrs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d1092288af9ecfd5378565a17df11a13dbe172d4a71abe9b55a9689f1336b8e"
 
 [[package]]
 name = "darling"
@@ -3005,6 +3021,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libloading"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
+dependencies = [
+ "cfg-if",
+ "windows-link 0.2.1",
+]
+
+[[package]]
 name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3059,15 +3085,16 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "liteparse"
-version = "2.0.1"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d04dc8f67c34f31f3f967fb9e07e9d8b9e06347e92c3280571f87611399105da"
+checksum = "fa474c38980dfe3ac3ef0089e363de6173b82d88732d46579f0b05cb103baf4b"
 dependencies = [
  "clap",
  "image",
  "infer",
  "liteparse-pdfium",
  "liteparse-pdfium-sys",
+ "ordered-float 5.3.0",
  "reqwest 0.13.3",
  "serde",
  "serde_json",
@@ -3075,25 +3102,27 @@ dependencies = [
  "tesseract-rs",
  "thiserror 2.0.18",
  "tokio",
+ "url",
  "web-time",
 ]
 
 [[package]]
 name = "liteparse-pdfium"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0589e7aad23c6c6ce2d9a10dd6a0a26a9f0829ee8fe232ba97e4dbf470a133c8"
+checksum = "b771c67d08e68065d53a0e69e24057e92794340a0789913314deb11c3fcd6cba"
 dependencies = [
  "liteparse-pdfium-sys",
 ]
 
 [[package]]
 name = "liteparse-pdfium-sys"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c253d796025c30f54879897e45a15ce75efa1712ab5d51104050bd2a08bb271"
+checksum = "75674efbaf5b17861cdfb702460739f8af71053e5d80e623a22fd5d35cf8c062"
 dependencies = [
  "flate2",
+ "libloading",
  "tar",
  "ureq 3.3.0",
 ]
@@ -3270,6 +3299,7 @@ name = "microagents-cli"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chunk",
  "futures-core",
  "futures-util",
  "ignore",
@@ -3280,8 +3310,11 @@ dependencies = [
  "model2vec-rs",
  "qdrant-edge",
  "ratatui",
+ "regex",
+ "serde",
  "serde_json",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -5445,6 +5478,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6575,6 +6614,7 @@ dependencies = [
  "getrandom 0.4.2",
  "js-sys",
  "serde_core",
+ "sha1_smol",
  "wasm-bindgen",
 ]
 

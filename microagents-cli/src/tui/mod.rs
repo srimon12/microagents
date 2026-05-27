@@ -491,8 +491,22 @@ fn block_lines(block: &Msg) -> Vec<Line<'static>> {
             ]
         }
         Msg::ToolResult(r) => match r {
-            ToolResult::Ok(s) => prefixed_inline("  ✓ ", theme::TOOL_OK, s, theme::DIM),
-            ToolResult::Err(s) => prefixed_inline("  ✗ ", theme::TOOL_ERR, s, theme::TOOL_ERR),
+            ToolResult::Ok(s) => {
+                let actual_res = if s.len() > 200 {
+                    s[..s.len().min(200)].to_string() + "..."
+                } else {
+                    s.to_string()
+                };
+                prefixed_inline("  ✓ ", theme::TOOL_OK, &actual_res, theme::DIM)
+            }
+            ToolResult::Err(s) => {
+                let actual_res = if s.len() > 200 {
+                    s[..s.len().min(200)].to_string() + "..."
+                } else {
+                    s.to_string()
+                };
+                prefixed_inline("  ✗ ", theme::TOOL_ERR, &actual_res, theme::TOOL_ERR)
+            }
         },
         Msg::Skill(name) => vec![Line::from(vec![
             Span::styled("  ✧ ", Style::default().fg(theme::SKILL)),
