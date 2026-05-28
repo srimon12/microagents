@@ -38,6 +38,7 @@ use ratatui::{
         ScrollbarState, Wrap,
     },
 };
+use unicode_width::UnicodeWidthStr;
 use tokio::sync::mpsc;
 
 /// Palette tuned for both light and dark terminals.
@@ -656,17 +657,24 @@ fn draw_transcript(f: &mut Frame, area: Rect, app: &mut App) {
 }
 
 /// Approximate the number of visual rows `lines` will occupy when wrapped to `width`.
+///
+/// Mirrors ratatui's `Wrap { trim: false }` behavior: every logical line always
+/// occupies at least one visual row (even when empty), plus extra rows for
+/// content that overflows `width`.
 fn wrapped_line_count(lines: &[Line<'_>], width: u16) -> u16 {
-    let mut count: u16 = 0;
+    let w = width.max(1);
+    let mut count: u32 = 0;
     for line in lines {
-        let line_width: u16 = line
+        let line_width: u32 = line
             .spans
             .iter()
-            .map(|s| s.content.chars().count() as u16)
+            .map(|s| s.content.width() as u32)
             .sum();
-        count += (line_width + width.saturating_sub(1)) / width.max(1);
+        // ceil(line_width / w), with a floor of 1 so empty lines still take a row.
+        let rows = line_width.div_ceil(w as u32).max(1);
+        count = count.saturating_add(rows);
     }
-    count
+    count.min(u16::MAX as u32) as u16
 }
 
 fn input_visual_height(input: &str, area_width: u16) -> u16 {

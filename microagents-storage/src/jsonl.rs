@@ -37,7 +37,7 @@ impl JsonlAgentStorage {
 
 #[async_trait::async_trait]
 impl AgentStorage for JsonlAgentStorage {
-    async fn create_session(&mut self, event: SessionInitEvent) -> anyhow::Result<()> {
+    async fn create_session(&self, event: SessionInitEvent) -> anyhow::Result<()> {
         self.ensure_sessions_dir()?;
         let mut file = OpenOptions::new()
             .create(true)
@@ -50,7 +50,7 @@ impl AgentStorage for JsonlAgentStorage {
         Ok(())
     }
 
-    async fn update_session(&mut self, event: AgentEventAny) -> anyhow::Result<()> {
+    async fn update_session(&self, event: AgentEventAny) -> anyhow::Result<()> {
         self.ensure_sessions_dir()?;
         let mut file = OpenOptions::new().create(true).append(true).open(
             jsonl_session_storage().join(&format!("{}.jsonl", &event.clone().session_id())),
@@ -61,7 +61,7 @@ impl AgentStorage for JsonlAgentStorage {
         Ok(())
     }
 
-    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
+    async fn get_session(&self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
         self.ensure_sessions_dir()?;
         let mut file = OpenOptions::new()
             .read(true)

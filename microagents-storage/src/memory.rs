@@ -23,7 +23,7 @@ impl Default for InMemoryAgentStorage {
 
 #[async_trait::async_trait]
 impl AgentStorage for InMemoryAgentStorage {
-    async fn create_session(&mut self, event: SessionInitEvent) -> anyhow::Result<()> {
+    async fn create_session(&self, event: SessionInitEvent) -> anyhow::Result<()> {
         let mut sessions = self
             .sessions
             .write()
@@ -35,7 +35,7 @@ impl AgentStorage for InMemoryAgentStorage {
         Ok(())
     }
 
-    async fn update_session(&mut self, event: AgentEventAny) -> anyhow::Result<()> {
+    async fn update_session(&self, event: AgentEventAny) -> anyhow::Result<()> {
         let session_id = event.clone().session_id();
         let mut sessions = self
             .sessions
@@ -51,7 +51,7 @@ impl AgentStorage for InMemoryAgentStorage {
         ))
     }
 
-    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
+    async fn get_session(&self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
         let sessions = self
             .sessions
             .read()

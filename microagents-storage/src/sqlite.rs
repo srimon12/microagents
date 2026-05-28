@@ -1,16 +1,11 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex, OnceLock},
-    time::SystemTime,
-};
-
+use crate::types::AgentStorage;
 use microagents_events::{
     AgentEventAny, SessionInitEvent,
     types::{AgentEvent, JsonRpcNotification},
 };
-use rusqlite::Connection;
-
-use crate::types::AgentStorage;
+use std::{path::PathBuf, sync::OnceLock, time::SystemTime};
+use tokio_rusqlite::Connection;
+use tokio_rusqlite::rusqlite;
 
 pub static SQLITE_SESSION_STORAGE: OnceLock<PathBuf> = OnceLock::new();
 
@@ -23,112 +18,108 @@ pub fn sqlite_session_storage() -> &'static PathBuf {
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SqliteAgentStorage {
-    connection: Option<Arc<Mutex<Connection>>>,
-}
-
-struct SqlRowImpl {
-    payload: String,
-    id: isize,
-}
-
-impl Default for SqliteAgentStorage {
-    fn default() -> Self {
-        Self { connection: None }
-    }
+    connection: Connection,
 }
 
 impl SqliteAgentStorage {
-    fn get_connection(&mut self) -> anyhow::Result<Arc<Mutex<Connection>>> {
-        if let Some(c) = self.connection.clone() {
-            return Ok(c);
-        }
-        let conn = Connection::open(sqlite_session_storage())?;
-        self.connection = Some(Arc::new(Mutex::new(conn)));
-        return Ok(self.connection.clone().unwrap());
+    pub async fn new(db_path: Option<String>) -> anyhow::Result<Self> {
+        let path = db_path.unwrap_or(sqlite_session_storage().to_string_lossy().to_string());
+        let connection = Connection::open(path).await?;
+        let storage = Self { connection };
+        storage.ensure_table_and_idx().await?;
+        Ok(storage)
     }
 
-    fn ensure_table_and_idx(&mut self) -> anyhow::Result<()> {
-        let conn_mu = self.get_connection()?;
-        let conn = conn_mu.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        conn.execute(
-            r#"CREATE TABLE events (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id  TEXT    NOT NULL,
-            payload     TEXT    NOT NULL,  -- JSON of the specific event
-            created_at  INTEGER NOT NULL   -- unix timestamp
-        );"#,
-            [],
-        )?;
-        conn.execute(
-            r#"CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id);"#,
-            [],
-        )?;
+    async fn ensure_table_and_idx(&self) -> anyhow::Result<()> {
+        self.connection
+            .call(|conn| -> Result<(), tokio_rusqlite::rusqlite::Error> {
+                conn.execute_batch(
+                    r#"
+                CREATE TABLE IF NOT EXISTS events (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id  TEXT    NOT NULL,
+                    payload     TEXT    NOT NULL,
+                    created_at  INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id);
+            "#,
+                )?;
+                Ok(())
+            })
+            .await?;
         Ok(())
     }
 }
 
 #[async_trait::async_trait]
 impl AgentStorage for SqliteAgentStorage {
-    async fn create_session(&mut self, event: SessionInitEvent) -> anyhow::Result<()> {
-        self.ensure_table_and_idx()?;
-        let conn_mu = self.get_connection()?;
-        let conn = conn_mu.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    async fn create_session(&self, event: SessionInitEvent) -> anyhow::Result<()> {
         let session_id = event.session_id.clone();
         let json_event = serde_json::to_string(&event.to_jsonrpc())?;
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_millis() as u32;
-        conn.execute(
-            r#"
-        INSERT INTO events (session_id, payload, created_at) VALUES (?1, ?2, ?3)
-        "#,
-            (session_id, json_event, now),
-        )?;
+        let now = now_millis()?;
+
+        self.connection
+            .call(move |conn| -> Result<(), tokio_rusqlite::rusqlite::Error> {
+                conn.execute(
+                    "INSERT INTO events (session_id, payload, created_at) VALUES (?1, ?2, ?3)",
+                    rusqlite::params![session_id, json_event, now],
+                )?;
+                Ok(())
+            })
+            .await?;
         Ok(())
     }
 
-    async fn update_session(&mut self, event: AgentEventAny) -> anyhow::Result<()> {
-        self.ensure_table_and_idx()?;
-        let conn_mu = self.get_connection()?;
-        let conn = conn_mu.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    async fn update_session(&self, event: AgentEventAny) -> anyhow::Result<()> {
         let session_id = event.clone().session_id();
         let json_event = serde_json::to_string(&event.to_jsonrpc())?;
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_millis() as u32;
-        conn.execute(
-            r#"
-        INSERT INTO events (session_id, payload, created_at) VALUES (?1, ?2, ?3)
-        "#,
-            (session_id, json_event, now),
-        )?;
+        let now = now_millis()?;
+
+        self.connection
+            .call(move |conn| -> Result<(), tokio_rusqlite::rusqlite::Error> {
+                conn.execute(
+                    "INSERT INTO events (session_id, payload, created_at) VALUES (?1, ?2, ?3)",
+                    rusqlite::params![session_id, json_event, now],
+                )?;
+                Ok(())
+            })
+            .await?;
         Ok(())
     }
 
-    async fn get_session(&mut self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
-        self.ensure_table_and_idx()?;
-        let conn_mu = self.get_connection()?;
-        let conn = conn_mu.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let mut stmt = conn.prepare("SELECT id, payload FROM events WHERE session_id = ?1")?;
-        let rows_iter = stmt.query_map([session_id], |row| {
-            Ok(SqlRowImpl {
-                id: row.get(0)?,
-                payload: row.get(1)?,
+    async fn get_session(&self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
+        let session_id = session_id.to_string();
+
+        let rows =
+            self.connection
+                .call(
+                    move |conn| -> Result<Vec<(isize, String)>, tokio_rusqlite::rusqlite::Error> {
+                        let mut stmt = conn.prepare(
+                            "SELECT id, payload FROM events WHERE session_id = ?1 ORDER BY id ASC",
+                        )?;
+                        let rows = stmt
+                    .query_map([&session_id], |row| {
+                        Ok((row.get::<_, isize>(0)?, row.get::<_, String>(1)?))
+                    })?
+                    .collect::<Result<Vec<(isize, String)>, tokio_rusqlite::rusqlite::Error>>()?;
+                        Ok(rows)
+                    },
+                )
+                .await?;
+
+        rows.into_iter()
+            .map(|(_, payload)| {
+                let jrpc: JsonRpcNotification = serde_json::from_str(&payload)?;
+                AgentEventAny::try_from(jrpc).map_err(|e| anyhow::anyhow!(e.to_string()))
             })
-        })?;
-        let mut rows = vec![];
-        for row in rows_iter {
-            rows.push(row.unwrap());
-        }
-        rows.sort_by(|a, b| a.id.cmp(&b.id));
-        let mut events = vec![];
-        for row in rows {
-            let jrpc: JsonRpcNotification = serde_json::from_str(&row.payload)?;
-            let ev = AgentEventAny::try_from(jrpc)?;
-            events.push(ev);
-        }
-        Ok(events)
+            .collect()
     }
+}
+
+fn now_millis() -> anyhow::Result<i64> {
+    Ok(SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_millis() as i64)
 }

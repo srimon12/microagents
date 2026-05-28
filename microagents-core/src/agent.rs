@@ -141,6 +141,8 @@ pub enum MicroAgentBuilderError {
     ProviderNotSupported(String),
     #[error("Tool with name {0} already exists")]
     ToolAlreadyDefined(String),
+    #[error("Storage could not be loaded: {0}")]
+    StorageLoadError(String),
 }
 
 pub struct DebuggableClient(pub Arc<UltrafastClient>);
@@ -226,14 +228,22 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
         self
     }
 
-    pub fn storage(mut self, storage: AgentStorageChoice) -> Self {
+    pub async fn storage(
+        mut self,
+        storage: AgentStorageChoice,
+    ) -> Result<Self, MicroAgentBuilderError> {
         match storage {
             AgentStorageChoice::Jsonl => self.storage = Box::new(JsonlAgentStorage {}),
             AgentStorageChoice::Memory => self.storage = Box::new(InMemoryAgentStorage::default()),
-            AgentStorageChoice::Sqlite => self.storage = Box::new(SqliteAgentStorage::default()),
+            AgentStorageChoice::Sqlite => {
+                let store = SqliteAgentStorage::new(None)
+                    .await
+                    .map_err(|e| MicroAgentBuilderError::StorageLoadError(e.to_string()))?;
+                self.storage = Box::new(store);
+            }
         }
 
-        self
+        Ok(self)
     }
 
     pub fn add_tool(
@@ -322,7 +332,7 @@ impl<Ctx> MicroAgent<Ctx> {
             SupportedProvider::OpenAI => base_client.with_openai(env::var("OPENAI_API_KEY")?),
             SupportedProvider::Groq => base_client.with_groq(env::var("GROQ_API_KEY")?),
             SupportedProvider::Ollama => base_client.with_ollama(
-                env::var("OLLAMA_BASE_URL").unwrap_or("http://localhost:11434/api".to_string()),
+                env::var("OLLAMA_BASE_URL").unwrap_or("http://localhost:11434".to_string()),
             ),
         };
         let client = base_client
@@ -377,7 +387,7 @@ impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
         let skill_name = input["skill_name"].as_str().unwrap();
         let skill_path = ensure_skill(skill_name);
         if let Some(p) = skill_path {
-            let content = fs::read_to_string(&p).map_err(|e| {
+            let content = fs::read_to_string(&p.join("SKILL.md")).map_err(|e| {
                 AgentError::ToolCallError(format!(
                     "Skill {skill_name} could not be read: {}",
                     e.to_string()
