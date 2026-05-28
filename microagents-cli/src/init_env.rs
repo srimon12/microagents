@@ -59,7 +59,22 @@ fn edge_config() -> &'static EdgeConfig {
 }
 
 pub fn parser() -> &'static LiteParse {
-    PARSER.get_or_init(|| LiteParse::new(LiteParseConfig::default()))
+    PARSER.get_or_init(|| {
+        LiteParse::new(LiteParseConfig {
+            ocr_enabled: true,
+            ocr_language: "eng".into(),
+            ocr_server_url: None,
+            tessdata_path: None,
+            max_pages: 500,
+            password: None,
+            target_pages: None,
+            dpi: 180_f32,
+            output_format: liteparse::OutputFormat::Text,
+            preserve_very_small_text: true,
+            quiet: true,
+            num_workers: 4,
+        })
+    })
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

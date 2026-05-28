@@ -78,17 +78,25 @@ enum UiEvent {
     RunFinished,
 }
 
+/// Bounds for the dynamic-height input box (in *visual* rows, content only).
+const INPUT_MIN_ROWS: u16 = 1;
+const INPUT_MAX_ROWS: u16 = 8;
+
 struct App {
+    /// Raw input buffer. May contain '\n' for multi-line prompts.
     input: String,
+    /// Byte offset of the caret inside `input`.
     cursor: usize,
     transcript: Vec<Msg>,
     session_id: Option<String>,
     busy: bool,
+    /// Current scroll offset in *visual* (post-wrap) rows from the top of the transcript.
     scroll: u16,
     auto_scroll: bool,
     quit: bool,
-    /// Number of lines the last-rendered transcript actually used. Used to clamp scrolling.
+    /// Visual height of the transcript content after width-wrapping (last frame).
     last_content_height: u16,
+    /// Visual height of the transcript viewport (last frame).
     last_viewport_height: u16,
 }
 
@@ -297,6 +305,11 @@ async fn handle_key<F, Fut>(
         KeyCode::Char('d') if ctrl && app.input.is_empty() => app.quit = true,
         KeyCode::Esc => app.quit = true,
         KeyCode::Enter if !app.busy => {
+            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                app.input.insert(app.cursor, '\n');
+                app.cursor += 1;
+                return;
+            }
             let prompt = app.input.trim().to_string();
             if prompt.is_empty() {
                 return;
@@ -387,13 +400,14 @@ async fn handle_key<F, Fut>(
 }
 
 fn draw(f: &mut Frame, app: &mut App) {
+    let input_height = input_visual_height(&app.input, f.area().width);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // header
-            Constraint::Min(1),    // chat
-            Constraint::Length(3), // input
-            Constraint::Length(1), // hint
+            Constraint::Length(3),            // header
+            Constraint::Min(1),               // chat
+            Constraint::Length(input_height), // input (dynamic)
+            Constraint::Length(1),            // hint
         ])
         .split(f.area());
 
@@ -616,11 +630,9 @@ fn draw_transcript(f: &mut Frame, area: Rect, app: &mut App) {
         )));
     }
 
-    // Total height after width-wrapping is hard to compute exactly; approximate
-    // by counting logical lines. ratatui's Paragraph::wrap will handle visual
-    // wrapping; we clamp scroll using logical line count which is a reasonable
-    // proxy for moderately-sized messages.
-    let total = lines.len() as u16;
+    // Compute wrapped height so auto-scroll actually reaches the bottom.
+    let wrap_width = inner.width.max(1);
+    let total = wrapped_line_count(&lines, wrap_width);
     let viewport = inner.height;
     app.last_content_height = total;
     app.last_viewport_height = viewport;
@@ -643,6 +655,32 @@ fn draw_transcript(f: &mut Frame, area: Rect, app: &mut App) {
     }
 }
 
+/// Approximate the number of visual rows `lines` will occupy when wrapped to `width`.
+fn wrapped_line_count(lines: &[Line<'_>], width: u16) -> u16 {
+    let mut count: u16 = 0;
+    for line in lines {
+        let line_width: u16 = line
+            .spans
+            .iter()
+            .map(|s| s.content.chars().count() as u16)
+            .sum();
+        count += (line_width + width.saturating_sub(1)) / width.max(1);
+    }
+    count
+}
+
+fn input_visual_height(input: &str, area_width: u16) -> u16 {
+    let usable = area_width.saturating_sub(4); // borders(2) + horizontal padding(2)
+    let prefix_cols = 2; // "▎ "
+    let wrap_width = usable.saturating_sub(prefix_cols).max(1);
+    let mut rows: u16 = 1;
+    for line in input.split('\n') {
+        let line_len = line.chars().count() as u16;
+        rows += line_len.saturating_sub(1) / wrap_width + 1;
+    }
+    rows.clamp(INPUT_MIN_ROWS, INPUT_MAX_ROWS) + 2 // +2 for borders
+}
+
 fn draw_input(f: &mut Frame, area: Rect, app: &App) {
     let border_color = if app.busy { theme::DIM } else { theme::ACCENT };
     let block = Block::default()
@@ -658,40 +696,66 @@ fn draw_input(f: &mut Frame, area: Rect, app: &App) {
             .add_modifier(Modifier::BOLD),
     );
 
-    let body: Span = if app.input.is_empty() && !app.busy {
-        Span::styled(
-            "Type a message and press Enter…",
-            Style::default().fg(theme::DIM).add_modifier(Modifier::DIM),
-        )
+    let lines: Vec<Line> = if app.input.is_empty() && !app.busy {
+        vec![Line::from(vec![
+            prompt_marker,
+            Span::styled(
+                "Type a message and press Enter…",
+                Style::default().fg(theme::DIM).add_modifier(Modifier::DIM),
+            ),
+        ])]
     } else if app.busy && app.input.is_empty() {
-        Span::styled(
-            "Waiting for the agent…",
-            Style::default()
-                .fg(theme::DIM)
-                .add_modifier(Modifier::ITALIC),
-        )
+        vec![Line::from(vec![
+            prompt_marker,
+            Span::styled(
+                "Waiting for the agent…",
+                Style::default()
+                    .fg(theme::DIM)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+        ])]
     } else {
-        Span::styled(app.input.clone(), Style::default().fg(theme::ASSISTANT))
+        let mut out = Vec::new();
+        for (i, line_text) in app.input.split('\n').enumerate() {
+            if i == 0 {
+                out.push(Line::from(vec![
+                    prompt_marker.clone(),
+                    Span::styled(line_text.to_string(), Style::default().fg(theme::ASSISTANT)),
+                ]));
+            } else {
+                out.push(Line::from(vec![
+                    Span::styled("   ", Style::default()),
+                    Span::styled(line_text.to_string(), Style::default().fg(theme::ASSISTANT)),
+                ]));
+            }
+        }
+        out
     };
 
-    let line = Line::from(vec![prompt_marker, body]);
-    let p = Paragraph::new(line).block(block);
+    let p = Paragraph::new(lines)
+        .block(block.clone())
+        .wrap(Wrap { trim: false });
     f.render_widget(p, area);
 
     // Cursor placement (only when accepting input).
     if !app.busy {
-        let inner = Rect {
-            x: area.x + 1,
-            y: area.y + 1,
-            width: area.width.saturating_sub(2),
-            height: area.height.saturating_sub(2),
+        let inner = block.inner(area);
+        let prefix_cols = 2u16; // "▎ "
+        let wrap_width = inner.width.saturating_sub(prefix_cols).max(1);
+
+        let text_before_cursor = &app.input[..app.cursor];
+        let line_index = text_before_cursor.matches('\n').count() as u16;
+        let current_line_start = text_before_cursor.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let current_line_text = &app.input[current_line_start..app.cursor];
+        let col_in_line = current_line_text.chars().count() as u16;
+
+        let cx = if line_index == 0 {
+            inner.x + prefix_cols + col_in_line.min(wrap_width)
+        } else {
+            inner.x + col_in_line % wrap_width
         };
-        // Visual offset = padding(1) + "▎ "(2) + cursor offset (chars before cursor).
-        let prefix_cols = 1 + 2;
-        let chars_before = app.input[..app.cursor].chars().count() as u16;
-        let cx = inner.x + prefix_cols + chars_before;
-        let cy = inner.y;
-        if cx < inner.x + inner.width {
+        let cy = inner.y + line_index + col_in_line / wrap_width;
+        if cy < inner.y + inner.height {
             f.set_cursor_position((cx, cy));
         }
     }

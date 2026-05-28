@@ -32,7 +32,7 @@ use ultrafast_models_sdk::{
 
 use crate::{
     common::{JsonResult, call_tool, convert_event_to_message, is_valid_json},
-    skills::{self, ensure_skill, parse_skill},
+    skills::{self, ensure_skill, find_skills, parse_skill},
     types::{Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction},
 };
 
@@ -136,7 +136,7 @@ pub enum MicroAgentBuilderError {
     #[error("Skill {0} not found")]
     SkillNotFound(String),
     #[error("Skill parsing error")]
-    SkillParsingError(#[from] skills::SkillParsingError),
+    SkillParsingError(#[from] skills::SkillLoadingError),
     #[error("Provider {0} not supported")]
     ProviderNotSupported(String),
     #[error("Tool with name {0} already exists")]
@@ -200,6 +200,14 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
             return Ok(self);
         }
         Err(MicroAgentBuilderError::SkillNotFound(skill_name))
+    }
+
+    pub fn find_skills(mut self) -> Result<Self, MicroAgentBuilderError> {
+        let loaded_skills = find_skills()?;
+        for (skill, des) in loaded_skills {
+            self.skills.insert(skill, des);
+        }
+        Ok(self)
     }
 
     pub fn provider(mut self, provider: String) -> Result<Self, MicroAgentBuilderError> {

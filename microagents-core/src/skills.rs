@@ -61,14 +61,14 @@ struct SkillFrontmatter {
 }
 
 #[derive(Debug, Error)]
-pub enum SkillParsingError {
+pub enum SkillLoadingError {
     #[error("Error while reading the skill file")]
     SkillReadError(#[from] io::Error),
     #[error("Error while parsing the skill's frontmatter")]
     SkillFrontMatterError(#[from] markdown_frontmatter::Error),
 }
 
-pub fn parse_skill(skill_file: &PathBuf) -> Result<String, SkillParsingError> {
+pub fn parse_skill(skill_file: &PathBuf) -> Result<String, SkillLoadingError> {
     let content = fs::read_to_string(skill_file)?;
     let (frontmatter, _) = markdown_frontmatter::parse::<SkillFrontmatter>(&content)?;
 
@@ -84,4 +84,33 @@ pub fn ensure_skill(skill_name: &str) -> Option<PathBuf> {
         return Some(g);
     }
     return None;
+}
+
+pub fn find_skills() -> Result<Vec<(String, String)>, SkillLoadingError> {
+    let g = global_skills_path();
+    let p = PathBuf::from(SKILLS_PATH);
+    let mut all_skills = vec![];
+    if g.exists() {
+        let result = fs::read_dir(g)?;
+        for entry in result {
+            let entry = entry?;
+            if entry.path().is_dir() {
+                let des = parse_skill(&entry.path().join("SKILL.md"))?;
+                all_skills.push((entry.file_name().to_str().unwrap().to_string(), des));
+            }
+        }
+    }
+
+    if p.exists() {
+        let result = fs::read_dir(p)?;
+        for entry in result {
+            let entry = entry?;
+            if entry.path().is_dir() {
+                let des = parse_skill(&entry.path().join("SKILL.md"))?;
+                all_skills.push((entry.file_name().to_str().unwrap().to_string(), des));
+            }
+        }
+    }
+
+    Ok(all_skills)
 }

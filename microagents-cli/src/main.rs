@@ -18,7 +18,8 @@ fn build_agent() -> Result<microagents_core::agent::MicroAgent<()>, AgentError> 
         .provider("openrouter".into())
         .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
         .storage(AgentStorageChoice::Jsonl)
-        .custom_instructions("Always use the weather_tool to get the weather of a location".into())
+        .find_skills()
+        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
         .add_tool(Arc::new(tools::WriteTool))
         .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
         .add_tool(Arc::new(tools::EditTool))
