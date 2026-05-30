@@ -1,7 +1,6 @@
-use std::{env::VarError, fmt::Debug, pin::Pin, sync::Arc};
-
 use microagents_events::{AgentEventAny, types::ToolResult};
 use serde_json::Value;
+use std::{env::VarError, fmt::Debug, pin::Pin, sync::Arc};
 use thiserror::Error;
 use ultrafast_models_sdk::models::{Function, StreamChunk, Tool};
 

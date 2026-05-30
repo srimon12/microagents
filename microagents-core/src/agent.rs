@@ -25,7 +25,7 @@ use serde_json::{Value, json};
 use thiserror::Error;
 use tokio::{sync::Semaphore, task::JoinSet};
 use ultrafast_models_sdk::{
-    ChatRequest, Message, Role, UltrafastClient,
+    ChatRequest, CircuitBreakerConfig, Message, ProviderConfig, Role, UltrafastClient,
     cache::{CacheConfig, CacheType},
     models::{Delta, FunctionCall, Tool, ToolCall},
 };
@@ -331,8 +331,28 @@ impl<Ctx> MicroAgent<Ctx> {
             }
             SupportedProvider::OpenAI => base_client.with_openai(env::var("OPENAI_API_KEY")?),
             SupportedProvider::Groq => base_client.with_groq(env::var("GROQ_API_KEY")?),
-            SupportedProvider::Ollama => base_client.with_ollama(
-                env::var("OLLAMA_BASE_URL").unwrap_or("http://localhost:11434".to_string()),
+            SupportedProvider::Ollama => base_client.with_provider(
+                "openai",
+                ProviderConfig {
+                    base_url: Some(
+                        env::var("OLLAMA_BASE_URL").unwrap_or("http://localhost:11434/v1".into()),
+                    ),
+                    api_key: "ollama".into(),
+                    name: "openai".into(),
+                    timeout: Duration::from_secs(300),
+                    max_retries: 3,
+                    retry_delay: Duration::from_millis(500),
+                    rate_limit: None,
+                    model_mapping: HashMap::new(),
+                    headers: HashMap::new(),
+                    enabled: true,
+                    circuit_breaker: Some(CircuitBreakerConfig {
+                        failure_threshold: 5,
+                        recovery_timeout: Duration::from_secs(30),
+                        request_timeout: Duration::from_secs(10),
+                        half_open_max_calls: 3,
+                    }),
+                },
             ),
         };
         let client = base_client

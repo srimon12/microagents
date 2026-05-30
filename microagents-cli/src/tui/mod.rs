@@ -38,8 +38,8 @@ use ratatui::{
         ScrollbarState, Wrap,
     },
 };
-use unicode_width::UnicodeWidthStr;
 use tokio::sync::mpsc;
+use unicode_width::UnicodeWidthStr;
 
 /// Palette tuned for both light and dark terminals.
 mod theme {
@@ -102,12 +102,12 @@ struct App {
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(session_id: Option<String>) -> Self {
         Self {
             input: String::new(),
             cursor: 0,
             transcript: Vec::new(),
-            session_id: None,
+            session_id,
             busy: false,
             scroll: 0,
             auto_scroll: true,
@@ -168,10 +168,7 @@ impl App {
                 };
                 self.push(Msg::Session(format!(
                     "session {} • {} • {}/{}",
-                    kind,
-                    short_id(&s.session_id),
-                    s.provider,
-                    s.model
+                    kind, &s.session_id, s.provider, s.model
                 )));
             }
             AgentEventAny::SessionStop(s) => {
@@ -221,21 +218,21 @@ impl App {
     }
 }
 
-fn short_id(id: &str) -> String {
-    id.chars().take(8).collect()
-}
-
-/// Start an interactive TUI session driven by `start_run`.
+/// Start an interactive TUI session, optionally resuming a previous one.
 ///
-/// `start_run` is called for each user message; it receives the prompt and the
-/// current session id (if any) and must return a [`RunStream`] of agent events.
-pub async fn run<F, Fut>(mut start_run: F) -> io::Result<()>
+/// When `session_id` is `Some(id)`, the first call to `start_run` will receive
+/// that id, allowing the agent to resume the conversation from storage. When
+/// `None`, behaves identically to [`run`].
+pub async fn run_with_session<F, Fut>(
+    session_id: Option<String>,
+    mut start_run: F,
+) -> io::Result<()>
 where
     F: FnMut(String, Option<String>) -> Fut + Send + 'static,
     Fut: Future<Output = Result<RunStream, AgentError>> + Send + 'static,
 {
     let mut terminal = setup_terminal()?;
-    let res = event_loop(&mut terminal, &mut start_run).await;
+    let res = event_loop(&mut terminal, &mut start_run, session_id).await;
     restore_terminal(&mut terminal)?;
     res
 }
@@ -257,12 +254,13 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Re
 async fn event_loop<F, Fut>(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     start_run: &mut F,
+    session_id: Option<String>,
 ) -> io::Result<()>
 where
     F: FnMut(String, Option<String>) -> Fut,
     Fut: Future<Output = Result<RunStream, AgentError>> + Send + 'static,
 {
-    let mut app = App::new();
+    let mut app = App::new(session_id);
     let (ui_tx, mut ui_rx) = mpsc::unbounded_channel::<UiEvent>();
     let mut tick = tokio::time::interval(Duration::from_millis(80));
 
@@ -419,11 +417,7 @@ fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
-    let session = app
-        .session_id
-        .as_deref()
-        .map(short_id)
-        .unwrap_or_else(|| "—".into());
+    let session = app.session_id.as_deref().unwrap_or_else(|| "—".into());
     let status = if app.busy { "● thinking" } else { "○ idle" };
     let status_color = if app.busy {
         theme::ACCENT_SOFT
@@ -665,11 +659,7 @@ fn wrapped_line_count(lines: &[Line<'_>], width: u16) -> u16 {
     let w = width.max(1);
     let mut count: u32 = 0;
     for line in lines {
-        let line_width: u32 = line
-            .spans
-            .iter()
-            .map(|s| s.content.width() as u32)
-            .sum();
+        let line_width: u32 = line.spans.iter().map(|s| s.content.width() as u32).sum();
         // ceil(line_width / w), with a floor of 1 so empty lines still take a row.
         let rows = line_width.div_ceil(w as u32).max(1);
         count = count.saturating_add(rows);

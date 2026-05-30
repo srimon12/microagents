@@ -38,6 +38,10 @@ struct Args {
     /// Defaults to 'jsonl' (store session events as newline-separated JSON objects in a file)
     #[arg(long, default_value = None)]
     storage: Option<String>,
+
+    /// Resume a previous session by id. If omitted, a new session is started.
+    #[arg(long = "session-id", value_name = "ID")]
+    session_id: Option<String>,
 }
 
 async fn build_agent(
@@ -98,7 +102,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     initialize_environment().await?;
     println!("Launching TUI...");
     let args = Args::parse();
-    tui::run(move |prompt, session_id| {
+    let initial_session = args.session_id.clone();
+    tui::run_with_session(initial_session, move |prompt, session_id| {
         let prov_c = args.provider.clone();
         let model_c = args.model.clone();
         let skill_c = args.skill.clone();
