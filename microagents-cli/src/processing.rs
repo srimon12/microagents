@@ -38,7 +38,7 @@ impl Chunk {
     }
 }
 
-const CODE_CHUNKER: OnceLock<CastChunker> = OnceLock::new();
+static CODE_CHUNKER: OnceLock<CastChunker> = OnceLock::new();
 
 fn code_chunker() -> &'static CastChunker {
     CODE_CHUNKER.get_or_init(|| CastChunker {
@@ -78,7 +78,7 @@ fn chunk_code(lang: Language, source: &str) -> Result<Vec<Chunk>, Box<dyn std::e
     for c in ast_chunks {
         let ch = Chunk::new(
             reconstruct_content(
-                lines,
+                lines.clone(),
                 c.line_index_range.start as usize,
                 c.line_index_range.end as usize,
             ),
