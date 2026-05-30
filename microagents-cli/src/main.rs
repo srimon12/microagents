@@ -44,24 +44,31 @@ struct Args {
     session_id: Option<String>,
 }
 
+fn storage_choice(storage: Option<String>) -> AgentStorageChoice {
+    match storage {
+        Some(s) => match s.as_str() {
+            "jsonl" => AgentStorageChoice::Jsonl,
+            "sqlite" => AgentStorageChoice::Sqlite,
+            _ => AgentStorageChoice::Jsonl,
+        },
+        None => AgentStorageChoice::Jsonl,
+    }
+}
+
+async fn build_storage(storage: Option<String>) -> Result<Box<dyn microagents_storage::types::AgentStorage>, AgentError> {
+    let st = storage_choice(storage);
+    let builder = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()));
+    let builder = builder.storage(st).await.map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
+    Ok(builder.storage)
+}
+
 async fn build_agent(
     provider: Option<String>,
     model: Option<String>,
     storage: Option<String>,
     skills: Vec<String>,
 ) -> Result<microagents_core::agent::MicroAgent<()>, AgentError> {
-    let st = match storage {
-        Some(s) => match s.as_str() {
-            "jsonl" => AgentStorageChoice::Jsonl,
-            "sqlite" => AgentStorageChoice::Sqlite,
-            _ => {
-                return Err(AgentError::ClientInitFailed(
-                    "Invalid storage type: {s}".into(),
-                ));
-            }
-        },
-        None => AgentStorageChoice::Jsonl,
-    };
+    let st = storage_choice(storage);
     let prov = SupportedProvider::from_str(&provider.clone().unwrap_or("openrouter".to_string()))
         .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
     let base_builder = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()))
@@ -103,16 +110,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching TUI...");
     let args = Args::parse();
     let initial_session = args.session_id.clone();
-    tui::run_with_session(initial_session, move |prompt, session_id| {
-        let prov_c = args.provider.clone();
-        let model_c = args.model.clone();
-        let skill_c = args.skill.clone();
-        let storage_c = args.storage.clone();
-        async move {
-            let agent = build_agent(prov_c, model_c, storage_c, skill_c).await?;
-            agent.run(prompt, session_id).await
-        }
-    })
+    let load_history_storage = args.storage.clone();
+    tui::run_with_session(
+        initial_session,
+        move |prompt, session_id| {
+            let prov_c = args.provider.clone();
+            let model_c = args.model.clone();
+            let skill_c = args.skill.clone();
+            let storage_c = args.storage.clone();
+            async move {
+                let agent = build_agent(prov_c, model_c, storage_c, skill_c).await?;
+                agent.run(prompt, session_id).await
+            }
+        },
+        move |session_id| {
+            let storage_c = load_history_storage.clone();
+            async move {
+                let storage = build_storage(storage_c).await?;
+                storage.get_session(&session_id).await.map_err(|e| {
+                    microagents_core::types::AgentError::SessionLoadError(e.to_string())
+                })
+            }
+        },
+    )
     .await?;
     Ok(())
 }

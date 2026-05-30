@@ -152,13 +152,13 @@ impl App {
 
     fn apply(&mut self, ev: UiEvent) {
         match ev {
-            UiEvent::Agent(e) => self.apply_agent_event(e),
+            UiEvent::Agent(e) => self.apply_agent_event(e, false),
             UiEvent::AgentError(e) => self.push(Msg::Error(e.to_string())),
             UiEvent::RunFinished => self.busy = false,
         }
     }
 
-    fn apply_agent_event(&mut self, ev: AgentEventAny) {
+    pub fn apply_agent_event(&mut self, ev: AgentEventAny, is_replay: bool) {
         match ev {
             AgentEventAny::SessionInit(s) => {
                 self.session_id = Some(s.session_id.clone());
@@ -180,8 +180,10 @@ impl App {
                     if s.success { "ok" } else { "failed" }
                 )));
             }
-            AgentEventAny::UserPromptSubmit(_) => {
-                // The prompt is already echoed locally on send.
+            AgentEventAny::UserPromptSubmit(m) => {
+                if is_replay {
+                    self.push(Msg::User(m.prompt));
+                }
             }
             AgentEventAny::StreamDelta(d) => {
                 let thinking = matches!(d.delta_type, DeltaType::Thinking);
@@ -223,16 +225,34 @@ impl App {
 /// When `session_id` is `Some(id)`, the first call to `start_run` will receive
 /// that id, allowing the agent to resume the conversation from storage. When
 /// `None`, behaves identically to [`run`].
-pub async fn run_with_session<F, Fut>(
+///
+/// `load_history` is called once at startup when `session_id` is `Some`. It
+/// should return the historical events for that session so the TUI can
+/// pre-populate the transcript before any user input.
+pub async fn run_with_session<F, Fut, H, Hfut>(
     session_id: Option<String>,
     mut start_run: F,
+    load_history: H,
 ) -> io::Result<()>
 where
     F: FnMut(String, Option<String>) -> Fut + Send + 'static,
     Fut: Future<Output = Result<RunStream, AgentError>> + Send + 'static,
+    H: FnOnce(String) -> Hfut + Send + 'static,
+    Hfut: Future<Output = Result<Vec<AgentEventAny>, AgentError>> + Send + 'static,
 {
     let mut terminal = setup_terminal()?;
-    let res = event_loop(&mut terminal, &mut start_run, session_id).await;
+    let history = if let Some(ref sid) = session_id {
+        match load_history(sid.clone()).await {
+            Ok(events) => events,
+            Err(e) => {
+                restore_terminal(&mut terminal)?;
+                return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
+            }
+        }
+    } else {
+        vec![]
+    };
+    let res = event_loop(&mut terminal, &mut start_run, session_id, history).await;
     restore_terminal(&mut terminal)?;
     res
 }
@@ -255,12 +275,16 @@ async fn event_loop<F, Fut>(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     start_run: &mut F,
     session_id: Option<String>,
+    history: Vec<AgentEventAny>,
 ) -> io::Result<()>
 where
     F: FnMut(String, Option<String>) -> Fut,
     Fut: Future<Output = Result<RunStream, AgentError>> + Send + 'static,
 {
     let mut app = App::new(session_id);
+    for ev in history {
+        app.apply_agent_event(ev, true);
+    }
     let (ui_tx, mut ui_rx) = mpsc::unbounded_channel::<UiEvent>();
     let mut tick = tokio::time::interval(Duration::from_millis(80));
 
