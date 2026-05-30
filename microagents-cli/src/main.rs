@@ -9,6 +9,7 @@ use std::{str::FromStr, sync::Arc};
 use crate::init_env::initialize_environment;
 
 mod init_env;
+mod processing;
 mod search;
 mod tools;
 mod tui;
@@ -55,10 +56,15 @@ fn storage_choice(storage: Option<String>) -> AgentStorageChoice {
     }
 }
 
-async fn build_storage(storage: Option<String>) -> Result<Box<dyn microagents_storage::types::AgentStorage>, AgentError> {
+async fn build_storage(
+    storage: Option<String>,
+) -> Result<Box<dyn microagents_storage::types::AgentStorage>, AgentError> {
     let st = storage_choice(storage);
     let builder = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()));
-    let builder = builder.storage(st).await.map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
+    let builder = builder
+        .storage(st)
+        .await
+        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
     Ok(builder.storage)
 }
 

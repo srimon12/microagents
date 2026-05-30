@@ -55,6 +55,7 @@ fn edge_config() -> &'static EdgeConfig {
         hnsw_config: Default::default(),
         quantization_config: None,
         optimizers: Default::default(),
+        wal_options: None,
     })
 }
 
