@@ -97,7 +97,7 @@ impl From<ToolResult> for Value {
 }
 
 /// A JSON-RPC 2.0 notification message.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JsonRpcNotification {
     pub jsonrpc: String,
     pub method: String,
@@ -130,4 +130,102 @@ pub trait AgentEvent: Debug + Send + Sync {
     fn to_jsonrpc(self) -> JsonRpcNotification;
     /// Return the session ID associated with this event.
     fn session_id(self) -> String;
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_value_from_toolcall() {
+        let tc = ToolCall {
+            call_type: "function".into(),
+            id: "1".into(),
+            function: FunctionCall {
+                name: "tool".into(),
+                arguments: "{}".into(),
+            },
+        };
+        let val = Value::from(tc);
+        if let Some(v) = val.as_object() {
+            assert_eq!(v.get("call_type"), Some(Value::from("function")).as_ref());
+            assert_eq!(v.get("id"), Some(Value::from("1")).as_ref());
+            assert!(v.get("function").is_some_and(|o| o.is_object()));
+        }
+    }
+
+    #[test]
+    fn test_toolcall_from_value_ok() {
+        let value = json!({
+            "call_type": "function",
+            "id": "1",
+            "function": {
+                "name": "tool",
+                "arguments": "{}"
+            }
+        });
+        let tc =
+            ToolCall::try_from(value).expect("Value should be correctly converted to tool call");
+        assert_eq!(tc.call_type, "function".to_string());
+        assert_eq!(tc.id, "1".to_string());
+        assert_eq!(tc.function.name, "tool".to_string());
+        assert_eq!(tc.function.arguments, "{}".to_string());
+    }
+
+    #[test]
+    fn test_toolcall_from_value_err() {
+        let value = json!({
+            "call_typ": "function",
+            "id": "1",
+            "func": {
+                "name": "tool",
+                "arguments": "{}"
+            }
+        });
+        let result = ToolCall::try_from(value);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_value_from_tool_result() {
+        let trs = ToolResult::Ok("success!".to_string());
+        let trf = ToolResult::Err("error!".to_string());
+        let value_s = Value::from(trs);
+        let value_f = Value::from(trf);
+        assert_eq!(
+            value_s,
+            json!({
+                "success": true,
+                "result": "success!",
+                "error": &Value::Null,
+            })
+        );
+        assert_eq!(
+            value_f,
+            json!({
+                "success": false,
+                "result": &Value::Null,
+                "error": "error!"
+            })
+        );
+    }
+
+    #[test]
+    fn test_jsonrpc_notification_builder() {
+        let jsonrpc = JsonRpcNotification::builder();
+        assert_eq!(jsonrpc.jsonrpc, JSONRPC.to_string());
+        assert_eq!(jsonrpc.method, String::new());
+        assert_eq!(jsonrpc.params, Map::<String, Value>::new());
+
+        let j = jsonrpc
+            .method("test".into())
+            .add_param("test".into(), Value::from("string"))
+            .add_param("number".into(), Value::from(1));
+
+        assert_eq!(j.method, "test".to_string());
+        assert_eq!(j.params.len(), 2);
+        assert!(j.params.get("test").is_some_and(|v| v.is_string()));
+        assert!(j.params.get("number").is_some_and(|v| v.is_number()));
+    }
 }

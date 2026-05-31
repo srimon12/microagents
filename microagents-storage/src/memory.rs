@@ -65,3 +65,106 @@ impl AgentStorage for InMemoryAgentStorage {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use microagents_events::{AssistantResponseEvent, SessionStopEvent, UserPromptSubmitEvent};
+
+    use super::*;
+
+    #[test]
+    fn test_default_init() {
+        let memory = InMemoryAgentStorage::default();
+        assert_eq!(
+            memory
+                .sessions
+                .read()
+                .expect("data should not be poisoned")
+                .len(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_session() {
+        let memory = InMemoryAgentStorage::default();
+        memory
+            .create_session(SessionInitEvent {
+                session_id: "1".to_string(),
+                model: "gpt-5.5".into(),
+                provider: "openai".into(),
+                system: "you are a helpful assistant".into(),
+                init_type: microagents_events::SessionInitType::Start,
+            })
+            .await
+            .expect("Should be able to create a session");
+        let sessions = memory.sessions.read().expect("data should not be poisoned");
+        assert!(sessions.get("1").is_some_and(|v| {
+            v.len() == 1
+                && v.first()
+                    .is_some_and(|f| f.clone().to_jsonrpc().method == "session.init")
+        }));
+    }
+
+    #[tokio::test]
+    async fn test_create_update_get_session() {
+        let memory = InMemoryAgentStorage::default();
+        memory
+            .create_session(SessionInitEvent {
+                session_id: "1".to_string(),
+                model: "gpt-5.5".into(),
+                provider: "openai".into(),
+                system: "you are a helpful assistant".into(),
+                init_type: microagents_events::SessionInitType::Start,
+            })
+            .await
+            .expect("Should be able to create a session");
+        memory
+            .update_session(AgentEventAny::UserPromptSubmit(UserPromptSubmitEvent {
+                prompt: "hello".to_string(),
+                session_id: "1".to_string(),
+                turn_id: "t1".to_string(),
+            }))
+            .await
+            .expect("Should be able to update memory");
+        memory
+            .update_session(AgentEventAny::AssistantResponse(AssistantResponseEvent {
+                session_id: "1".to_string(),
+                turn_id: "t1".to_string(),
+                full_text: "hello".to_string(),
+                tool_calls: None,
+            }))
+            .await
+            .expect("Should be able to update memory");
+        memory
+            .update_session(AgentEventAny::SessionStop(SessionStopEvent {
+                session_id: "1".to_string(),
+                result: Some("hello".to_string()),
+                error: None,
+                success: true,
+            }))
+            .await
+            .expect("Should be able to update memory");
+        let events = memory
+            .get_session("1")
+            .await
+            .expect("Should be able to get the session");
+        assert_eq!(events.len(), 4);
+        assert_eq!(
+            events[0].clone().to_jsonrpc().method,
+            "session.init".to_string()
+        );
+        assert_eq!(
+            events[1].clone().to_jsonrpc().method,
+            "user.prompt.submit".to_string()
+        );
+        assert_eq!(
+            events[2].clone().to_jsonrpc().method,
+            "assistant.response".to_string()
+        );
+        assert_eq!(
+            events[3].clone().to_jsonrpc().method,
+            "session.stop".to_string()
+        );
+    }
+}

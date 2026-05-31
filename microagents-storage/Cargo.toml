@@ -13,3 +13,6 @@ dirs = "6.0.0"
 fs2 = "0.4.3"
 tokio = { version = "1.52.3", features = ["full"] }
 tokio-rusqlite = {version = "0.7.0", features = ["serde_json"]}
+
+[dev-dependencies]
+serial_test = "3.5.0"

@@ -331,9 +331,12 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                 init_type: value
                     .params
                     .get("init_type")
-                    .and_then(|v| match v.as_str() {
-                        Some(s) => SessionInitType::from_str(s).ok(),
-                        None => None,
+                    .and_then(|v| {
+                        
+                        match v.as_str() {
+                            Some(s) => SessionInitType::from_str(s).ok(),
+                            None => None,
+                        }
                     })
                     .ok_or_else(|| AgentEventError::MissingField("init_type".to_string()))?,
             })),
@@ -461,5 +464,344 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
             }
             method => Err(AgentEventError::UnknownMethod(method.to_string())),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn session_init_type_from_value() {
+        assert_eq!(Value::from(SessionInitType::Start), Value::from("start"));
+        assert_eq!(Value::from(SessionInitType::Resume), Value::from("resume"));
+    }
+
+    #[test]
+    fn session_init_type_from_str_ok() {
+        assert!(matches!(
+            SessionInitType::from_str("start"),
+            Ok(SessionInitType::Start)
+        ));
+        assert!(matches!(
+            SessionInitType::from_str("resume"),
+            Ok(SessionInitType::Resume)
+        ));
+    }
+
+    #[test]
+    fn session_init_type_from_str_err() {
+        let err = SessionInitType::from_str("unknown").unwrap_err();
+        assert!(matches!(err, AgentEventError::InvalidFieldType(_)));
+        assert!(
+            err.to_string()
+                .contains("No init type with message: unknown")
+        );
+    }
+
+    #[test]
+    fn delta_type_from_value() {
+        assert_eq!(Value::from(DeltaType::Text), Value::from("text"));
+        assert_eq!(Value::from(DeltaType::Thinking), Value::from("thinking"));
+    }
+
+    #[test]
+    fn session_init_event_to_jsonrpc() {
+        let event = SessionInitEvent {
+            session_id: "s1".into(),
+            model: "gpt-4".into(),
+            provider: "openai".into(),
+            system: "sys".into(),
+            init_type: SessionInitType::Start,
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "session.init");
+        assert_eq!(rpc.params.get("session_id"), Some(&Value::from("s1")));
+        assert_eq!(rpc.params.get("model"), Some(&Value::from("gpt-4")));
+        assert_eq!(rpc.params.get("provider"), Some(&Value::from("openai")));
+        assert_eq!(rpc.params.get("system"), Some(&Value::from("sys")));
+        assert_eq!(rpc.params.get("init_type"), Some(&Value::from("start")));
+    }
+
+    #[test]
+    fn session_stop_event_to_jsonrpc() {
+        let event = SessionStopEvent {
+            session_id: "s1".into(),
+            success: true,
+            result: Some("done".into()),
+            error: None,
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "session.stop");
+        assert_eq!(rpc.params.get("success"), Some(&Value::from(true)));
+        assert_eq!(rpc.params.get("result"), Some(&Value::from("done")));
+        assert_eq!(rpc.params.get("error"), Some(&Value::Null));
+    }
+
+    #[test]
+    fn user_prompt_submit_event_to_jsonrpc() {
+        let event = UserPromptSubmitEvent {
+            session_id: "s1".into(),
+            turn_id: "t1".into(),
+            prompt: "hello".into(),
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "user.prompt.submit");
+        assert_eq!(rpc.params.get("prompt"), Some(&Value::from("hello")));
+    }
+
+    #[test]
+    fn stream_delta_event_to_jsonrpc() {
+        let event = StreamDeltaEvent {
+            session_id: "s1".into(),
+            turn_id: "t1".into(),
+            delta: "world".into(),
+            delta_type: DeltaType::Thinking,
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "stream.delta");
+        assert_eq!(rpc.params.get("delta"), Some(&Value::from("world")));
+        assert_eq!(rpc.params.get("delta_type"), Some(&Value::from("thinking")));
+    }
+
+    #[test]
+    fn tool_call_event_to_jsonrpc() {
+        let event = ToolCallEvent {
+            session_id: "s1".into(),
+            turn_id: "t1".into(),
+            name: "read".into(),
+            input: json!({"path": "/tmp"}),
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "tool.call");
+        assert_eq!(rpc.params.get("name"), Some(&Value::from("read")));
+        assert_eq!(rpc.params.get("input"), Some(&json!({"path": "/tmp"})));
+    }
+
+    #[test]
+    fn tool_result_event_to_jsonrpc() {
+        let event = ToolResultEvent {
+            session_id: "s1".into(),
+            turn_id: "t1".into(),
+            result: ToolResult::Ok("ok".into()),
+            tool_call_id: "tc1".into(),
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "tool.result");
+        assert_eq!(rpc.params.get("tool_call_id"), Some(&Value::from("tc1")));
+        assert_eq!(
+            rpc.params.get("result"),
+            Some(&json!({"success": true, "result": "ok", "error": Value::Null}))
+        );
+    }
+
+    #[test]
+    fn skill_load_event_to_jsonrpc() {
+        let event = SkillLoadEvent {
+            session_id: "s1".into(),
+            turn_id: "t1".into(),
+            skill_name: "coding".into(),
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "skill.load");
+        assert_eq!(rpc.params.get("skill_name"), Some(&Value::from("coding")));
+    }
+
+    #[test]
+    fn assistant_response_event_to_jsonrpc() {
+        let event = AssistantResponseEvent {
+            session_id: "s1".into(),
+            turn_id: "t1".into(),
+            full_text: "hi".into(),
+            tool_calls: None,
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "assistant.response");
+        assert_eq!(rpc.params.get("full_text"), Some(&Value::from("hi")));
+        assert_eq!(rpc.params.get("tool_calls"), Some(&Value::Null));
+    }
+
+    #[test]
+    fn agent_event_any_session_id() {
+        let event = AgentEventAny::SessionInit(SessionInitEvent {
+            session_id: "sid".into(),
+            model: "m".into(),
+            provider: "p".into(),
+            system: "s".into(),
+            init_type: SessionInitType::Start,
+        });
+        assert_eq!(event.session_id(), "sid");
+    }
+
+    #[test]
+    fn agent_event_any_to_jsonrpc_roundtrip() {
+        let event = AgentEventAny::UserPromptSubmit(UserPromptSubmitEvent {
+            session_id: "s1".into(),
+            turn_id: "t1".into(),
+            prompt: "p".into(),
+        });
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "user.prompt.submit");
+        assert_eq!(rpc.params.get("session_id"), Some(&Value::from("s1")));
+    }
+
+    #[test]
+    fn try_from_jsonrpc_session_init_ok() {
+        let rpc = JsonRpcNotification::builder()
+            .method("session.init".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("model".into(), Value::from("gpt-4"))
+            .add_param("provider".into(), Value::from("openai"))
+            .add_param("system".into(), Value::from("sys"))
+            .add_param("init_type".into(), Value::from("resume"));
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(
+            matches!(any, AgentEventAny::SessionInit(ref e) if e.session_id == "s1" && matches!(e.init_type, SessionInitType::Resume))
+        );
+    }
+
+    #[test]
+    fn try_from_jsonrpc_session_init_missing_field() {
+        let rpc = JsonRpcNotification::builder()
+            .method("session.init".into())
+            .add_param("session_id".into(), Value::from("s1"));
+        let err = AgentEventAny::try_from(rpc).unwrap_err();
+        assert!(matches!(err, AgentEventError::MissingField(_)));
+    }
+
+    #[test]
+    fn try_from_jsonrpc_session_stop_ok() {
+        let rpc = JsonRpcNotification::builder()
+            .method("session.stop".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("success".into(), Value::from(true))
+            .add_param("result".into(), Value::from("done"))
+            .add_param("error".into(), Value::Null);
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(
+            matches!(any, AgentEventAny::SessionStop(ref e) if e.success && e.result == Some("done".into()) && e.error.is_none())
+        );
+    }
+
+    #[test]
+    fn try_from_jsonrpc_user_prompt_submit_ok() {
+        let rpc = JsonRpcNotification::builder()
+            .method("user.prompt.submit".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("prompt".into(), Value::from("hello"));
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(matches!(any, AgentEventAny::UserPromptSubmit(ref e) if e.prompt == "hello"));
+    }
+
+    #[test]
+    fn try_from_jsonrpc_stream_delta_text_default() {
+        let rpc = JsonRpcNotification::builder()
+            .method("stream.delta".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("delta".into(), Value::from("d"));
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(
+            matches!(any, AgentEventAny::StreamDelta(ref e) if e.delta == "d" && matches!(e.delta_type, DeltaType::Text))
+        );
+    }
+
+    #[test]
+    fn try_from_jsonrpc_stream_delta_thinking() {
+        let rpc = JsonRpcNotification::builder()
+            .method("stream.delta".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("delta".into(), Value::from("d"))
+            .add_param("delta_type".into(), Value::from("thinking"));
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(
+            matches!(any, AgentEventAny::StreamDelta(ref e) if matches!(e.delta_type, DeltaType::Thinking))
+        );
+    }
+
+    #[test]
+    fn try_from_jsonrpc_tool_call_ok() {
+        let rpc = JsonRpcNotification::builder()
+            .method("tool.call".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("name".into(), Value::from("read"))
+            .add_param("input".into(), json!({"path": "/tmp"}));
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(matches!(any, AgentEventAny::ToolCall(ref e) if e.name == "read"));
+    }
+
+    #[test]
+    fn try_from_jsonrpc_tool_result_ok() {
+        let rpc = JsonRpcNotification::builder()
+            .method("tool.result".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("tool_call_id".into(), Value::from("tc1"))
+            .add_param(
+                "result".into(),
+                json!({"success": true, "result": "ok", "error": Value::Null}),
+            );
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(
+            matches!(any, AgentEventAny::ToolResult(ref e) if matches!(e.result, ToolResult::Ok(ref s) if s == "ok"))
+        );
+    }
+
+    #[test]
+    fn try_from_jsonrpc_skill_load_ok() {
+        let rpc = JsonRpcNotification::builder()
+            .method("skill.load".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("skill_name".into(), Value::from("coding"));
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(matches!(any, AgentEventAny::SkillLoad(ref e) if e.skill_name == "coding"));
+    }
+
+    #[test]
+    fn try_from_jsonrpc_assistant_response_ok() {
+        let rpc = JsonRpcNotification::builder()
+            .method("assistant.response".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("full_text".into(), Value::from("hi"));
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(
+            matches!(any, AgentEventAny::AssistantResponse(ref e) if e.full_text == "hi" && e.tool_calls.is_none())
+        );
+    }
+
+    #[test]
+    fn try_from_jsonrpc_assistant_response_with_tool_calls() {
+        let rpc = JsonRpcNotification::builder()
+            .method("assistant.response".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("full_text".into(), Value::from("hi"))
+            .add_param("tool_calls".into(), json!([{"call_type":"function","id":"1","function":{"name":"tool","arguments":"{}"}}]));
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(matches!(any, AgentEventAny::AssistantResponse(ref e) if e.tool_calls.is_some()));
+    }
+
+    #[test]
+    fn try_from_jsonrpc_unknown_method() {
+        let rpc = JsonRpcNotification::builder()
+            .method("unknown".into())
+            .add_param("session_id".into(), Value::from("s1"));
+        let err = AgentEventAny::try_from(rpc).unwrap_err();
+        assert!(matches!(err, AgentEventError::UnknownMethod(ref m) if m == "unknown"));
+    }
+
+    #[test]
+    fn try_from_jsonrpc_missing_session_id() {
+        let rpc = JsonRpcNotification::builder()
+            .method("session.stop".into())
+            .add_param("success".into(), Value::from(true));
+        let err = AgentEventAny::try_from(rpc).unwrap_err();
+        assert!(matches!(err, AgentEventError::MissingField(ref m) if m == "session_id"));
     }
 }

@@ -228,7 +228,7 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
         storage: AgentStorageChoice,
     ) -> Result<Self, MicroAgentBuilderError> {
         match storage {
-            AgentStorageChoice::Jsonl => self.storage = Box::new(JsonlAgentStorage {}),
+            AgentStorageChoice::Jsonl => self.storage = Box::new(JsonlAgentStorage::default()),
             AgentStorageChoice::Memory => self.storage = Box::new(InMemoryAgentStorage::default()),
             AgentStorageChoice::Sqlite => {
                 let store = SqliteAgentStorage::new(None)
