@@ -77,3 +77,46 @@ pub trait ToolFunction<Ctx>: Debug + Send + Sync {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct MyTool;
+
+    #[async_trait::async_trait]
+    impl ToolFunction<()> for MyTool {
+        fn name(&self) -> String {
+            "tool".to_string()
+        }
+
+        fn description(&self) -> String {
+            "description".to_string()
+        }
+
+        fn input_schema(&self) -> Value {
+            json!({})
+        }
+
+        async fn execute(
+            &self,
+            _input: Value,
+            _ctx: &Arc<ToolExecutionContext<()>>,
+        ) -> Result<ToolResult, AgentError> {
+            Ok(ToolResult::Ok("success".into()))
+        }
+    }
+
+    #[test]
+    fn test_to_sdk_tool() {
+        let tool = MyTool {};
+        let sdk_tool = tool.to_sdk_tool();
+        assert_eq!(sdk_tool.tool_type, "function".to_string());
+        assert_eq!(sdk_tool.function.name, tool.name());
+        assert_eq!(sdk_tool.function.description, Some(tool.description()));
+        assert_eq!(sdk_tool.function.parameters, tool.input_schema());
+    }
+}
