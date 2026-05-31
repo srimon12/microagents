@@ -290,14 +290,13 @@ impl ToolFunction<()> for WriteTool {
                 ));
             }
         };
-        if let Some(parent) = Path::new(path).parent() {
-            if !parent.as_os_str().is_empty() {
-                if let Err(e) = fs::create_dir_all(parent) {
-                    return Ok(ToolResult::Err(format!(
-                        "Failed to create parent directories for {path}: {e}"
-                    )));
-                }
-            }
+        if let Some(parent) = Path::new(path).parent()
+            && !parent.as_os_str().is_empty()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            return Ok(ToolResult::Err(format!(
+                "Failed to create parent directories for {path}: {e}"
+            )));
         }
         match fs::write(path, content) {
             Ok(_) => Ok(ToolResult::Ok(format!(

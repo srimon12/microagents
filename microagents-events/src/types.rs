@@ -57,13 +57,13 @@ impl TryFrom<Value> for ToolCall {
         let v = serde_json::to_string(&value).map_err(|e| {
             AgentEventError::InvalidFieldType(format!(
                 "Value for a tool call should be serializable, got: {}",
-                e.to_string()
+                e
             ))
         })?;
         let tc: ToolCall = serde_json::from_str(&v).map_err(|e| {
             AgentEventError::InvalidFieldType(format!(
                 "Value for a tool call should deserialize in a ToolCall, got: {}",
-                e.to_string()
+                e
             ))
         })?;
         Ok(tc)
@@ -82,16 +82,16 @@ pub enum ToolResult {
 impl From<ToolResult> for Value {
     fn from(value: ToolResult) -> Self {
         match value {
-            ToolResult::Ok(result) => Value::from(json!({
+            ToolResult::Ok(result) => json!({
                 "success": true,
                 "result": result,
                 "error": Value::Null,
-            })),
-            ToolResult::Err(error) => Value::from(json!({
+            }),
+            ToolResult::Err(error) => json!({
                 "success": false,
                 "result": Value::Null,
                 "error": error,
-            })),
+            }),
         }
     }
 }

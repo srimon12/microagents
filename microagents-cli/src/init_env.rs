@@ -217,8 +217,8 @@ fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::err
         let content = fs::read_to_string(&p)?;
         fs::write(&p, new_content)?;
         let fls: HashMap<String, Document> = serde_json::from_str(&content)?;
-        let paths_now: HashSet<&str> = files.iter().map(|(k, _)| k.as_str()).collect();
-        let paths_before: HashSet<&str> = fls.iter().map(|(k, _)| k.as_str()).collect();
+        let paths_now: HashSet<&str> = files.keys().map(|k| k.as_str()).collect();
+        let paths_before: HashSet<&str> = fls.keys().map(|k| k.as_str()).collect();
 
         let created: HashSet<&str> = paths_now.difference(&paths_before).copied().collect();
         let deleted: HashSet<&str> = paths_before.difference(&paths_now).copied().collect();
@@ -337,7 +337,7 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
             }
         };
 
-        let mut chunks = chunk(&ext.as_str(), content)?;
+        let mut chunks = chunk(ext.as_str(), content)?;
         if chunks.is_empty() {
             continue;
         }

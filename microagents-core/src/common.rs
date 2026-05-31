@@ -95,5 +95,5 @@ pub async fn call_tool<Ctx: Send + Sync + 'static>(
     jsonschema::validate(&tool.input_schema(), &tool_args)
         .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
     let result = tool.execute(tool_args, &tool_context).await?;
-    return Ok(result);
+    Ok(result)
 }
