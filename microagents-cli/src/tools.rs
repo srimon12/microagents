@@ -9,7 +9,8 @@ use std::sync::{Arc, OnceLock};
 
 use tokio::process::Command;
 
-use crate::init_env::{SUPPORTED_LIT_EXTENSIONS, embed_query, parser};
+use crate::init_env::{SUPPORTED_LIT_EXTENSIONS, parser};
+use crate::processing::embed_query;
 use crate::search::search as vector_search;
 
 static DANGEROUS: OnceLock<Regex> = OnceLock::new();
@@ -146,11 +147,17 @@ impl ToolFunction<()> for SearchTool {
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect()
         });
-        let limit = input["limit"].as_u64().map(|l| l as u32);
-        let score_threshold = input["score_threshold"].as_f64();
+        let limit = input["limit"].as_u64().map(|l| l as usize);
+        let score_threshold = input["score_threshold"].as_f64().map(|l| l as f32);
 
-        let embedding = embed_query(&query);
-        match vector_search(embedding, document_paths, limit, score_threshold) {
+        let (embedding, sparse_embedding) = embed_query(&query);
+        match vector_search(
+            embedding,
+            sparse_embedding,
+            document_paths,
+            limit,
+            score_threshold,
+        ) {
             Ok(results) => {
                 let payload: Vec<Value> = results
                     .into_iter()
