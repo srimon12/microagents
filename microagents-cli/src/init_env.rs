@@ -2,9 +2,10 @@ use ignore::WalkBuilder;
 use liteparse::{LiteParse, LiteParseConfig};
 use model2vec_rs::model::StaticModel;
 use qdrant_edge::{
-    Condition, Distance, EdgeConfig, EdgeShard, EdgeVectorParams, FieldCondition, Filter, JsonPath,
-    Match, PointId, PointInsertOperations, PointOperations, PointStruct, PointStructPersisted,
-    UpdateOperation,
+    Condition, Distance, EdgeConfig, EdgeShard, EdgeSparseVectorParams, EdgeVectorParams,
+    FieldCondition, Filter, JsonPath, Match, PointId, PointInsertOperations, PointOperations,
+    PointStruct, PointStructPersisted, QuantizationConfig, SparseVector, UpdateOperation, Vector,
+    Vectors,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,9 +16,12 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::SystemTime;
 
+use crate::processing::{chunk, embed};
+
 const FILES_INDEX: &str = ".microagents/files_index.json";
 const SHARD_DIRECTORY: &str = ".microagents/vectors";
 pub const VECTORS_NAME: &str = "dense_text";
+pub const SPARSE_VECTORS_NAME: &str = "sparse_text";
 const VECTORS_SIZE: usize = 256;
 const BATCH_SIZE: usize = 1000;
 pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
@@ -37,24 +41,40 @@ fn embedding_model() -> &'static StaticModel {
 }
 
 fn edge_config() -> &'static EdgeConfig {
-    EDGE_CONFIG.get_or_init(|| EdgeConfig {
-        on_disk_payload: true,
-        vectors: HashMap::from([(
-            VECTORS_NAME.to_string(),
-            EdgeVectorParams {
-                size: VECTORS_SIZE,
-                distance: Distance::Cosine,
-                on_disk: Some(true),
-                quantization_config: None,
-                multivector_config: None,
-                datatype: None,
-                hnsw_config: None,
-            },
-        )]),
-        sparse_vectors: HashMap::new(),
-        hnsw_config: Default::default(),
-        quantization_config: None,
-        optimizers: Default::default(),
+    EDGE_CONFIG.get_or_init(|| {
+        let config: QuantizationConfig = serde_json::from_value(serde_json::json!({
+            "turbo": {
+                "always_ram": true,
+                "bits": "bits4"
+            }
+        }))
+        .expect("Should be able to generate quantization config");
+        EdgeConfig {
+            on_disk_payload: true,
+            vectors: HashMap::from([(
+                VECTORS_NAME.to_string(),
+                EdgeVectorParams {
+                    size: VECTORS_SIZE,
+                    distance: Distance::Cosine,
+                    on_disk: Some(true),
+                    quantization_config: Some(config),
+                    multivector_config: None,
+                    datatype: None,
+                    hnsw_config: None,
+                },
+            )]),
+            sparse_vectors: HashMap::from([(
+                SPARSE_VECTORS_NAME.to_string(),
+                EdgeSparseVectorParams {
+                    modifier: Some(qdrant_edge::Modifier::Idf),
+                    ..Default::default()
+                },
+            )]),
+            hnsw_config: Default::default(),
+            quantization_config: None,
+            optimizers: Default::default(),
+            wal_options: None,
+        }
     })
 }
 
@@ -126,10 +146,13 @@ impl Document {
 pub struct EmbeddingPayload {
     pub document_path: String,
     pub content: String,
+    pub line_start: Option<u32>,
+    pub line_end: Option<u32>,
 }
 
 struct EmbeddingWithPayload {
     embedding: Vec<f32>,
+    sparse_embedding: SparseVector,
     payload: EmbeddingPayload,
 }
 
@@ -224,26 +247,6 @@ fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::err
     })
 }
 
-fn chunk(content: String) -> Vec<String> {
-    let chunks: Vec<&[u8]> = chunk::chunk(content.as_bytes()).size(4096).collect();
-
-    let cs: Vec<String> = chunks
-        .iter()
-        .map(|c| String::from_utf8_lossy(c).to_string())
-        .collect();
-    cs
-}
-
-fn embed(sentences: &[String]) -> Vec<Vec<f32>> {
-    let embeddings = embedding_model().encode(sentences);
-    embeddings
-}
-
-pub fn embed_query(query: &str) -> Vec<f32> {
-    let embeddings = embedding_model().encode(&[query.to_string()]);
-    embeddings.into_iter().next().unwrap_or_default()
-}
-
 pub fn load_qdrant_edge() -> Result<EdgeShard, Box<dyn std::error::Error>> {
     let root_path = root_or_cwd()?;
     let p = root_path.join(SHARD_DIRECTORY);
@@ -257,10 +260,18 @@ pub fn load_qdrant_edge() -> Result<EdgeShard, Box<dyn std::error::Error>> {
 }
 
 /// Create a point struct for upserting.
-fn make_point(id: uuid::Uuid, vector: Vec<f32>, payload: Value) -> PointStruct {
+fn make_point(
+    id: uuid::Uuid,
+    vector: Vec<f32>,
+    sparse_vector: SparseVector,
+    payload: Value,
+) -> PointStruct {
     PointStruct::new(
         PointId::Uuid(id),
-        HashMap::from([(VECTORS_NAME.into(), vector)]),
+        Vectors::new_named([
+            (SPARSE_VECTORS_NAME, Vector::from(sparse_vector)),
+            (VECTORS_NAME, Vector::from(vector)),
+        ]),
         payload,
     )
 }
@@ -275,7 +286,12 @@ fn upload_embeddings(eps: Vec<EmbeddingWithPayload>) -> Result<(), Box<dyn std::
         let mut points: Vec<PointStructPersisted> = vec![];
         for embd in chunk {
             let payload_json = serde_json::to_value(&embd.payload)?;
-            let point = make_point(uuid::Uuid::new_v4(), embd.embedding.clone(), payload_json);
+            let point = make_point(
+                uuid::Uuid::new_v4(),
+                embd.embedding.clone(),
+                embd.sparse_embedding.clone(),
+                payload_json,
+            );
             points.push(point.into());
         }
         let operation = UpdateOperation::PointOperation(PointOperations::UpsertPoints(
@@ -321,17 +337,20 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
             }
         };
 
-        let chunks = chunk(content);
+        let mut chunks = chunk(&ext.as_str(), content)?;
         if chunks.is_empty() {
             continue;
         }
-        let vectors = embed(&chunks);
-        for (chunk_text, embedding) in chunks.into_iter().zip(vectors.into_iter()) {
+        let chunks = embed(&mut chunks);
+        for chunk in chunks {
             embeddings_with_payloads.push(EmbeddingWithPayload {
-                embedding,
+                embedding: chunk.embedding.unwrap(),
+                sparse_embedding: chunk.sparse_embedding.unwrap(),
                 payload: EmbeddingPayload {
                     document_path: fl.clone(),
-                    content: chunk_text,
+                    content: chunk.content,
+                    line_start: chunk.line_start,
+                    line_end: chunk.line_end,
                 },
             });
         }
