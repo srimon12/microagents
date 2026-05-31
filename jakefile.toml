@@ -1,0 +1,8 @@
+build = "cargo +nightly build"
+build-rel = "cargo +nightly build --release"
+build-cli = "cargo +nightly build -p microagents-cli"
+build-cli-rel = "cargo +nightly build -p microagents-cli --release"
+clippy = "cargo +nightly clippy --all-targets"
+clippy-fix = "cargo +nightly clippy --all-targets --fix --allow-dirty"
+format = "cargo +nightly fmt --all -- --check"
+format-fix = "cargo +nightly fmt --all"

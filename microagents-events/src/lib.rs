@@ -197,7 +197,7 @@ impl AgentEvent for ToolCallEvent {
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("turn_id".into(), Value::from(self.turn_id))
             .add_param("name".into(), Value::from(self.name))
-            .add_param("input".into(), Value::from(self.input))
+            .add_param("input".into(), self.input)
     }
 
     fn session_id(self) -> String {
@@ -331,15 +331,9 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                 init_type: value
                     .params
                     .get("init_type")
-                    .and_then(|v| {
-                        let init_type = match v.as_str() {
-                            Some(s) => match SessionInitType::from_str(s) {
-                                Ok(i) => Some(i),
-                                Err(_) => None,
-                            },
-                            None => None,
-                        };
-                        init_type
+                    .and_then(|v| match v.as_str() {
+                        Some(s) => SessionInitType::from_str(s).ok(),
+                        None => None,
                     })
                     .ok_or_else(|| AgentEventError::MissingField("init_type".to_string()))?,
             })),
@@ -462,7 +456,7 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| AgentEventError::MissingField("full_text".to_string()))?
                         .to_string(),
-                    tool_calls: tool_calls,
+                    tool_calls,
                 }))
             }
             method => Err(AgentEventError::UnknownMethod(method.to_string())),

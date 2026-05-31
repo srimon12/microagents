@@ -74,8 +74,9 @@ seems compelling enough for the task at hand.
 </guidelines>
 "#;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
 pub enum SupportedProvider {
+    #[default]
     OpenAI,
     OpenRouter,
     Ollama,
@@ -104,12 +105,6 @@ impl fmt::Display for SupportedProvider {
             Self::OpenAI => "openai",
         };
         write!(f, "{}", s)
-    }
-}
-
-impl Default for SupportedProvider {
-    fn default() -> Self {
-        SupportedProvider::OpenAI
     }
 }
 
@@ -407,11 +402,8 @@ impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
         let skill_name = input["skill_name"].as_str().unwrap();
         let skill_path = ensure_skill(skill_name);
         if let Some(p) = skill_path {
-            let content = fs::read_to_string(&p.join("SKILL.md")).map_err(|e| {
-                AgentError::ToolCallError(format!(
-                    "Skill {skill_name} could not be read: {}",
-                    e.to_string()
-                ))
+            let content = fs::read_to_string(p.join("SKILL.md")).map_err(|e| {
+                AgentError::ToolCallError(format!("Skill {skill_name} could not be read: {}", e))
             })?;
             return Ok(ToolResult::Ok(content));
         }
@@ -425,7 +417,7 @@ impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
 impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
     async fn generate(&mut self) -> Result<GenerationStream, AgentError> {
         let client = self.init_client()?;
-        let tools: Vec<Tool> = self.tools.iter().map(|(_, t)| t.to_sdk_tool()).collect();
+        let tools: Vec<Tool> = self.tools.values().map(|t| t.to_sdk_tool()).collect();
         let stream = client
             .stream_chat_completion(ChatRequest {
                 model: self.model.clone(),
@@ -475,7 +467,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 let events = match events_res {
                     Ok(e) => e,
                     Err(e) => {
-                        yield Err(AgentError::RunError(format!("Error while getting the session: {}", e.to_string())));
+                        yield Err(AgentError::RunError(format!("Error while getting the session: {}", e)));
                         return;
                     }
                 };
@@ -484,9 +476,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
 
                 events
                     .iter()
-                    .map(|e| convert_event_to_message(e.clone()))
-                    .filter(|m| m.is_some())
-                    .map(|m| m.unwrap())
+                    .filter_map(|e| convert_event_to_message(e.clone()))
                     .collect()
             } else {
                 let sid = uuid::Uuid::new_v4().to_string();
@@ -502,7 +492,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 match self.storage.create_session(sint).await {
                     Ok(_) => {},
                     Err(e) => {
-                        yield Err(AgentError::RunError(format!("An error occurred while creating the session in the storage: {}", e.to_string())));
+                        yield Err(AgentError::RunError(format!("An error occurred while creating the session in the storage: {}", e)));
                         return;
                     }
                 }
@@ -527,7 +517,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
             match self.storage.update_session(user_prompt_submit.clone()).await {
                 Ok(_) => {},
                 Err(e) => {
-                    yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e.to_string())));
+                    yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e)));
                     return;
                 }
             };
@@ -537,7 +527,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 let mut generation = match self.generate().await {
                     Ok(g) => g,
                     Err(e) => {
-                        yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                        yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e)));
                         return;
                     }
                 };
@@ -551,7 +541,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             for choice in chunk.choices {
                                 deltas.push((choice.index, choice.delta));
                             }
-                            deltas.sort_by(|a, b| a.0.cmp(&b.0));
+                            deltas.sort_by_key(|a| a.0);
                             for (_, delta) in deltas {
                                 if let Some(c) = delta.content {
                                     text += &c;
@@ -564,7 +554,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                     match self.storage.update_session(ev.clone()).await {
                                         Ok(_) => {},
                                         Err(e) => {
-                                            yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e.to_string())));
+                                            yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e)));
                                             return;
                                         }
                                     }
@@ -591,7 +581,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             match self.storage.update_session(stop_ev.clone()).await {
                                 Ok(_) => {},
                                 Err(e) => {
-                                    yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                                    yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e)));
                                     return;
                                 }
                             }
@@ -617,14 +607,14 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                     match self.storage.update_session(ev.clone()).await {
                         Ok(_) => {},
                         Err(e) => {
-                            yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                            yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e)));
                             return;
                         }
                     }
                     match self.storage.update_session(stop_ev.clone()).await {
                         Ok(_) => {},
                         Err(e) => {
-                            yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e.to_string())));
+                            yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e)));
                             return;
                         }
                     }
@@ -642,7 +632,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                     10
                 };
                 let semaphore = Arc::new(Semaphore::new(concurrency));
-                for (_, (tid, name, args)) in &tool_calls {
+                for (tid, name, args) in tool_calls.values() {
                     match is_valid_json(args) {
                         JsonResult::Valid(v) => {
                             let tool = local_tools.get(name);
@@ -665,7 +655,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                 match self.storage.update_session(tc_ev.clone()).await {
                                     Ok(_) => {},
                                     Err(e) => {
-                                        yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e.to_string())));
+                                        yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e)));
                                         return;
                                     }
                                 }
@@ -674,7 +664,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                 let permit = match permit_res {
                                     Ok(p) => p,
                                     Err(e) => {
-                                        yield Err(AgentError::RunError(format!("Error while acquiring semaphore: {}", e.to_string())));
+                                        yield Err(AgentError::RunError(format!("Error while acquiring semaphore: {}", e)));
                                         return;
                                     }
                                 };
@@ -709,7 +699,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             match self.storage.update_session(ev.clone()).await {
                                 Ok(_) => {},
                                 Err(e) => {
-                                    yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e.to_string())));
+                                    yield Err(AgentError::RunError(format!("An error occurred while updating the session in the storage: {}", e)));
                                     return;
                                 }
                             }

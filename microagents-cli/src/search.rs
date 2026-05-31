@@ -36,11 +36,8 @@ pub fn search(
 ) -> Result<Vec<ResultWithScore>, Box<dyn std::error::Error>> {
     let edge_shard = load_qdrant_edge()?;
     let mut all_results: Vec<ResultWithScore> = vec![];
-    let threshold: Option<OrderedFloat<f32>> = score_threshold.map(|t| OrderedFloat(t));
-    let top_k = match limit {
-        Some(l) => l,
-        None => 10,
-    };
+    let threshold: Option<OrderedFloat<f32>> = score_threshold.map(OrderedFloat);
+    let top_k = limit.unwrap_or(10);
     let stmt_filter = match document_paths {
         Some(d) => Some(Filter::new_must(Condition::Field(
             FieldCondition::new_match(

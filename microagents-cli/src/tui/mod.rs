@@ -168,7 +168,7 @@ impl App {
                 };
                 self.push(Msg::Session(format!(
                     "session {} • {} • {}/{}",
-                    kind, &s.session_id, s.provider, s.model
+                    kind, s.session_id, s.provider, s.model
                 )));
             }
             AgentEventAny::SessionStop(s) => {
@@ -246,7 +246,7 @@ where
             Ok(events) => events,
             Err(e) => {
                 restore_terminal(&mut terminal)?;
-                return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
+                return Err(io::Error::other(e.to_string()));
             }
         }
     } else {
@@ -441,7 +441,7 @@ fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
-    let session = app.session_id.as_deref().unwrap_or_else(|| "—".into());
+    let session = app.session_id.as_deref().unwrap_or("—");
     let status = if app.busy { "● thinking" } else { "○ idle" };
     let status_color = if app.busy {
         theme::ACCENT_SOFT

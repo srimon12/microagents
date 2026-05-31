@@ -83,7 +83,7 @@ pub fn ensure_skill(skill_name: &str) -> Option<PathBuf> {
     } else if g.exists() {
         return Some(g);
     }
-    return None;
+    None
 }
 
 pub fn find_skills() -> Result<Vec<(String, String)>, SkillLoadingError> {
