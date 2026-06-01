@@ -7,7 +7,7 @@ use std::{convert::TryFrom, str::FromStr};
 use crate::types::{AgentEvent, AgentEventError, JsonRpcNotification, ToolCall, ToolResult};
 
 /// Indicates whether a session is being started fresh or resumed.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionInitType {
     /// Start a new session.
     Start,
