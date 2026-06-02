@@ -253,7 +253,6 @@ mod tests {
             .into_iter()
             .filter(|(name, _)| name.starts_with("skill-"))
             .collect();
-        dbg!(local_skills.clone());
         assert_eq!(local_skills.len(), 2);
         let mut names: Vec<_> = local_skills.into_iter().map(|(n, _)| n).collect();
         names.sort();
