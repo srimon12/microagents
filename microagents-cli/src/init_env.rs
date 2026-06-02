@@ -142,7 +142,7 @@ impl Document {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EmbeddingPayload {
     pub document_path: String,
     pub content: String,
@@ -150,6 +150,7 @@ pub struct EmbeddingPayload {
     pub line_end: Option<u32>,
 }
 
+#[derive(Debug, Clone)]
 struct EmbeddingWithPayload {
     embedding: Vec<f32>,
     sparse_embedding: SparseVector,
@@ -347,7 +348,7 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
                 embedding: chunk.embedding.unwrap(),
                 sparse_embedding: chunk.sparse_embedding.unwrap(),
                 payload: EmbeddingPayload {
-                    document_path: fl.clone(),
+                    document_path: abs_path.to_string_lossy().to_string(),
                     content: chunk.content,
                     line_start: chunk.line_start,
                     line_end: chunk.line_end,
@@ -389,7 +390,7 @@ fn delete_files(to_delete: HashSet<String>) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-pub async fn initialize_environment() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn initialize_environment() -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
     let root_path = root_or_cwd()?;
     if !root_path.join(".microagents").exists() {
         fs::create_dir_all(root_path.join(".microagents"))?;
@@ -411,7 +412,7 @@ pub async fn initialize_environment() -> Result<(), Box<dyn std::error::Error>> 
 
     if diff.is_no_diff() {
         println!("No changes to apply!");
-        return Ok(());
+        return Ok((0, 0, 0));
     }
 
     println!("Applying changes to detected diff files...");
@@ -419,5 +420,5 @@ pub async fn initialize_environment() -> Result<(), Box<dyn std::error::Error>> 
     delete_files(diff.to_delete())?;
     ingest_files(diff.to_reingest()).await?;
 
-    Ok(())
+    Ok((diff.created.len(), diff.modified.len(), diff.deleted.len()))
 }

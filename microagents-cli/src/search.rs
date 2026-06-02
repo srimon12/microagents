@@ -8,10 +8,11 @@ use std::str::FromStr;
 
 use crate::init_env::{EmbeddingPayload, SPARSE_VECTORS_NAME, VECTORS_NAME, load_qdrant_edge};
 
+#[derive(Debug, Clone)]
 pub struct ResultWithScore {
     pub content: String,
     pub document_path: String,
-    pub score: f64,
+    pub score: f32,
 }
 
 /// Convert Qdrant Payload back to DocMeta
@@ -57,7 +58,7 @@ pub fn search(
                 }))),
                 limit: top_k,
                 params: None,
-                filter: stmt_filter.clone(),
+                filter: None,
                 score_threshold: threshold,
             },
             Prefetch {
@@ -68,7 +69,7 @@ pub fn search(
                 }))),
                 limit: top_k,
                 params: None,
-                filter: stmt_filter.clone(),
+                filter: None,
                 score_threshold: None,
             },
         ],
@@ -77,7 +78,7 @@ pub fn search(
             weights: Some(vec![OrderedFloat(0.75), OrderedFloat(0.25)]),
         })),
         filter: stmt_filter,
-        score_threshold: threshold,
+        score_threshold: None,
         limit: top_k,
         offset: 0,
         params: None,
@@ -94,7 +95,7 @@ pub fn search(
         let scored_result = ResultWithScore {
             content: embd_payload.content,
             document_path: embd_payload.document_path,
-            score: r.score as f64,
+            score: r.score,
         };
         all_results.push(scored_result);
     }
