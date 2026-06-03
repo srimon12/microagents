@@ -176,7 +176,8 @@ mod tests {
 
     #[test]
     fn test_parse_skill_missing_file_fails() {
-        let missing = PathBuf::from("/nonexistent/path/SKILL.md");
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("missing").join("SKILL.md");
         let err = parse_skill(&missing).unwrap_err();
         assert!(
             matches!(err, SkillLoadingError::SkillReadError(_)),

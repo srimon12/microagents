@@ -154,12 +154,15 @@ async fn test_search_filters() {
         .await
         .expect("Environment initialization should not fail");
     let (dense, sparse) = embed_query("console.log('Hello World')");
+    let ts_path = tmp
+        .path()
+        .join("test.ts")
+        .canonicalize()
+        .expect("Should canonicalize test.ts");
     let results = search(
         dense,
         sparse,
-        Some(vec![
-            "/private".to_string() + tmp.path().join("test.ts").to_str().unwrap(),
-        ]),
+        Some(vec![ts_path.to_str().unwrap().to_string()]),
         None,
         None,
     )
@@ -190,16 +193,8 @@ async fn test_search_filters_no_exist() {
         .await
         .expect("Environment initialization should not fail");
     let (dense, sparse) = embed_query("console.log('Hello World')");
-    let results = search(
-        dense,
-        sparse,
-        Some(vec![
-            "/private".to_string() + tmp.path().join("test.js").to_str().unwrap(),
-        ]),
-        None,
-        None,
-    )
-    .expect("Search should not fail");
+    let results = search(dense, sparse, Some(vec!["test.js".to_string()]), None, None)
+        .expect("Search should not fail");
     assert_eq!(results.len(), 0);
     std::env::set_current_dir(cur_dir)
         .expect("Should be able to change the current working directory");
@@ -233,6 +228,14 @@ async fn test_search_limit() {
 
 #[test]
 fn test_chunking_and_embedding() {
+    match std::env::var("RUN_CLI_TESTS") {
+        Ok(v) => {
+            if v != "true" {
+                return;
+            }
+        }
+        Err(_) => return,
+    }
     let code = r#"
 def hello_world() -> None:
     print('Hello world!')

@@ -124,9 +124,6 @@ async fn build_agent(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     initialize_environment(args.verbose).await?;
-    if args.verbose {
-        println!("Launching TUI...");
-    }
     if let Some(p) = args.prompt {
         let agent = build_agent(args.provider, args.model, args.storage, args.skill).await?;
         let mut stream = agent
@@ -151,6 +148,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         return Ok(());
+    }
+    if args.verbose {
+        println!("Launching TUI...");
     }
     let initial_session = args.session_id.clone();
     let load_history_storage = args.storage.clone();

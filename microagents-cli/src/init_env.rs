@@ -347,7 +347,7 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
                 embedding: chunk.embedding.unwrap(),
                 sparse_embedding: chunk.sparse_embedding.unwrap(),
                 payload: EmbeddingPayload {
-                    document_path: abs_path.to_string_lossy().to_string(),
+                    document_path: abs_path.to_string_lossy().replace('\\', "/"),
                     content: chunk.content,
                     line_start: chunk.line_start,
                     line_end: chunk.line_end,
@@ -416,7 +416,9 @@ pub async fn initialize_environment(
     }
 
     if diff.is_no_diff() {
-        println!("No changes to apply!");
+        if verbose {
+            println!("No changes to apply!");
+        }
         return Ok((0, 0, 0));
     }
 

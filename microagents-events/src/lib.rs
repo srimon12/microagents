@@ -668,6 +668,19 @@ mod tests {
     }
 
     #[test]
+    fn try_from_jsonrpc_session_init_invalid_init_type() {
+        let rpc = JsonRpcNotification::builder()
+            .method("session.init".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("model".into(), Value::from("gpt-4"))
+            .add_param("provider".into(), Value::from("openai"))
+            .add_param("system".into(), Value::from("sys"))
+            .add_param("init_type".into(), Value::from("invalid"));
+        let err = AgentEventAny::try_from(rpc).unwrap_err();
+        assert!(matches!(err, AgentEventError::InvalidFieldType(_)));
+    }
+
+    #[test]
     fn try_from_jsonrpc_session_stop_ok() {
         let rpc = JsonRpcNotification::builder()
             .method("session.stop".into())
