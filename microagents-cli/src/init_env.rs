@@ -80,7 +80,7 @@ fn edge_config() -> &'static EdgeConfig {
 pub fn parser() -> &'static LiteParse {
     PARSER.get_or_init(|| {
         LiteParse::new(LiteParseConfig {
-            ocr_enabled: true,
+            ocr_enabled: cfg!(not(target_os = "windows")),
             ocr_language: "eng".into(),
             ocr_server_url: None,
             tessdata_path: None,

@@ -50,20 +50,6 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Force Ninja generator (Windows)
-        run: echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
-        shell: bash
-
-      - name: Install Tesseract
-        run: choco install tesseract --no-progress
-        shell: pwsh
-
-      - name: Set Tesseract env
-        run: |
-          echo "TESSERACT_INCLUDE_DIRS=C:\Program Files\Tesseract-OCR\include" >> $GITHUB_ENV
-          echo "TESSERACT_LIB_DIRS=C:\Program Files\Tesseract-OCR\lib" >> $GITHUB_ENV
-        shell: bash
-
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
