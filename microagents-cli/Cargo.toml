@@ -7,7 +7,6 @@ edition = "2024"
 async-trait = "0.1.89"
 futures-core = "0.3.32"
 futures-util = "0.3.32"
-liteparse = "2.0.2"
 microagents-core = {path = "../microagents-core"}
 microagents-events = {path = "../microagents-events"}
 microagents-storage = {path = "../microagents-storage"}
@@ -25,6 +24,16 @@ regex = "1.12.3"
 clap = { version = "4.6.1", features = ["derive"] }
 astchunk = "0.2.0"
 
+[target.'cfg(windows)'.dependencies]
+liteparse = { version = "2.0.2", default-features = false }
+
+[target.'cfg(not(windows))'.dependencies]
+liteparse = { version = "2.0.2" }
+
 [[bin]]
 name = "microag"
 path = "src/main.rs"
+
+[dev-dependencies]
+serial_test = "3.5.0"
+tempfile = "3.27.0"

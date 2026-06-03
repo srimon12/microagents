@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::SystemTime;
@@ -81,7 +80,7 @@ fn edge_config() -> &'static EdgeConfig {
 pub fn parser() -> &'static LiteParse {
     PARSER.get_or_init(|| {
         LiteParse::new(LiteParseConfig {
-            ocr_enabled: true,
+            ocr_enabled: cfg!(not(target_os = "windows")),
             ocr_language: "eng".into(),
             ocr_server_url: None,
             tessdata_path: None,
@@ -142,7 +141,7 @@ impl Document {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EmbeddingPayload {
     pub document_path: String,
     pub content: String,
@@ -150,6 +149,7 @@ pub struct EmbeddingPayload {
     pub line_end: Option<u32>,
 }
 
+#[derive(Debug, Clone)]
 struct EmbeddingWithPayload {
     embedding: Vec<f32>,
     sparse_embedding: SparseVector,
@@ -195,7 +195,7 @@ fn collect_files() -> Result<HashMap<String, Document>, Box<dyn std::error::Erro
                 repl.clone(),
                 Document::new(
                     repl,
-                    meta.size(),
+                    meta.len(),
                     meta.modified()?
                         .duration_since(SystemTime::UNIX_EPOCH)?
                         .as_millis(),
@@ -347,7 +347,7 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
                 embedding: chunk.embedding.unwrap(),
                 sparse_embedding: chunk.sparse_embedding.unwrap(),
                 payload: EmbeddingPayload {
-                    document_path: fl.clone(),
+                    document_path: abs_path.to_string_lossy().replace('\\', "/"),
                     content: chunk.content,
                     line_start: chunk.line_start,
                     line_end: chunk.line_end,
@@ -389,7 +389,9 @@ fn delete_files(to_delete: HashSet<String>) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-pub async fn initialize_environment() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn initialize_environment(
+    verbose: bool,
+) -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
     let root_path = root_or_cwd()?;
     if !root_path.join(".microagents").exists() {
         fs::create_dir_all(root_path.join(".microagents"))?;
@@ -400,24 +402,32 @@ pub async fn initialize_environment() -> Result<(), Box<dyn std::error::Error>> 
     let _ = parser();
 
     let files = collect_files()?;
-    println!("Collected all the files in the current directory...");
+    if verbose {
+        println!("Collected all the files in the current directory...");
+    }
     let diff = diff_files(files)?;
 
-    println!(
-        "Computed diff for files: re-ingesting {:?} file(s), deleting {:?}",
-        diff.to_reingest().len(),
-        diff.deleted.len()
-    );
-
-    if diff.is_no_diff() {
-        println!("No changes to apply!");
-        return Ok(());
+    if verbose {
+        println!(
+            "Computed diff for files: re-ingesting {:?} file(s), deleting {:?}",
+            diff.to_reingest().len(),
+            diff.deleted.len()
+        );
     }
 
-    println!("Applying changes to detected diff files...");
+    if diff.is_no_diff() {
+        if verbose {
+            println!("No changes to apply!");
+        }
+        return Ok((0, 0, 0));
+    }
+
+    if verbose {
+        println!("Applying changes to detected diff files...");
+    }
 
     delete_files(diff.to_delete())?;
     ingest_files(diff.to_reingest()).await?;
 
-    Ok(())
+    Ok((diff.created.len(), diff.modified.len(), diff.deleted.len()))
 }

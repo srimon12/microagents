@@ -162,6 +162,7 @@ pub struct MicroAgent<Ctx> {
     pub parallel_tool_calls: bool,
 }
 
+#[derive(Debug)]
 pub struct MicroAgentBuilder<Ctx> {
     tools: HashMap<String, Arc<dyn ToolFunction<Ctx>>>,
     skills: HashMap<String, String>,
@@ -228,7 +229,7 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
         storage: AgentStorageChoice,
     ) -> Result<Self, MicroAgentBuilderError> {
         match storage {
-            AgentStorageChoice::Jsonl => self.storage = Box::new(JsonlAgentStorage {}),
+            AgentStorageChoice::Jsonl => self.storage = Box::new(JsonlAgentStorage::default()),
             AgentStorageChoice::Memory => self.storage = Box::new(InMemoryAgentStorage::default()),
             AgentStorageChoice::Sqlite => {
                 let store = SqliteAgentStorage::new(None)
@@ -741,5 +742,418 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
             }
         });
         Ok(s)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{
+        Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction,
+    };
+    use async_stream::stream;
+    use futures_util::StreamExt;
+    use microagents_events::types::ToolResult;
+    use serde_json::Value;
+    use std::sync::Arc;
+
+    // ------------------------------------------------------------------
+    // DummyAgent – a mock implementation of the Agent trait
+    // ------------------------------------------------------------------
+
+    #[derive(Debug)]
+    struct DummyAgent {
+        pub generate_called: bool,
+        pub run_called: bool,
+        pub last_prompt: Option<String>,
+        pub last_session_id: Option<String>,
+    }
+
+    impl DummyAgent {
+        fn new() -> Self {
+            Self {
+                generate_called: false,
+                run_called: false,
+                last_prompt: None,
+                last_session_id: None,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Agent for DummyAgent {
+        async fn generate(&mut self) -> Result<GenerationStream, AgentError> {
+            self.generate_called = true;
+            let s = stream! {
+                yield Ok(ultrafast_models_sdk::models::StreamChunk {
+                    id: "1".into(),
+                    object: "chat.completion.chunk".into(),
+                    created: 0,
+                    model: "dummy".into(),
+                    choices: vec![],
+                });
+            };
+            Ok(Box::pin(s))
+        }
+
+        async fn run(
+            mut self,
+            prompt: String,
+            session_id: Option<String>,
+        ) -> Result<RunStream, AgentError> {
+            self.run_called = true;
+            self.last_prompt = Some(prompt.clone());
+            self.last_session_id = session_id.clone();
+            let s = stream! {
+                yield Ok(AgentEventAny::UserPromptSubmit(UserPromptSubmitEvent {
+                    session_id: session_id.unwrap_or_else(|| "new".into()),
+                    turn_id: "t1".into(),
+                    prompt,
+                }));
+            };
+            Ok(Box::pin(s))
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // A simple dummy tool for builder tests
+    // ------------------------------------------------------------------
+
+    #[derive(Debug)]
+    struct DummyTool;
+
+    #[async_trait::async_trait]
+    impl ToolFunction<()> for DummyTool {
+        fn name(&self) -> String {
+            "dummy".into()
+        }
+        fn description(&self) -> String {
+            "A dummy tool".into()
+        }
+        fn input_schema(&self) -> Value {
+            json!({"type": "object"})
+        }
+        async fn execute(
+            &self,
+            _input: Value,
+            _ctx: &Arc<ToolExecutionContext<()>>,
+        ) -> Result<ToolResult, AgentError> {
+            Ok(ToolResult::Ok("done".into()))
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Builder default tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_builder_default_provider_is_openai() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()));
+        assert_eq!(builder.provider, SupportedProvider::OpenAI);
+    }
+
+    #[test]
+    fn test_builder_default_model_is_empty() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()));
+        assert!(builder.model.is_empty());
+    }
+
+    #[test]
+    fn test_builder_default_skills_is_empty() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()));
+        assert!(builder.skills.is_empty());
+    }
+
+    #[test]
+    fn test_builder_default_tools_contains_skills_tool() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()));
+        assert!(builder.tools.contains_key("skills"));
+        assert_eq!(builder.tools.len(), 1);
+    }
+
+    #[test]
+    fn test_builder_default_parallel_tool_calls_is_false() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()));
+        assert!(!builder.parallel_tool_calls);
+    }
+
+    // ------------------------------------------------------------------
+    // Builder pattern tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_builder_provider_sets_provider() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("groq".into())
+            .unwrap();
+        assert_eq!(builder.provider, SupportedProvider::Groq);
+    }
+
+    #[test]
+    fn test_builder_provider_invalid_returns_error() {
+        let result =
+            MicroAgentBuilder::new(ToolExecutionContext::new(())).provider("unknown".into());
+        assert!(result.is_err());
+        assert!(
+            matches!(
+                result.unwrap_err(),
+                MicroAgentBuilderError::ProviderNotSupported(_)
+            ),
+            "expected ProviderNotSupported error"
+        );
+    }
+
+    #[test]
+    fn test_builder_model_sets_model() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(())).model("gpt-5.5".into());
+        assert_eq!(builder.model, "gpt-5.5");
+    }
+
+    #[test]
+    fn test_builder_parallel_tool_calls_sets_flag() {
+        let builder =
+            MicroAgentBuilder::new(ToolExecutionContext::new(())).parallel_tool_calls(true);
+        assert!(builder.parallel_tool_calls);
+    }
+
+    #[test]
+    fn test_builder_custom_instructions_sets_instructions() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .custom_instructions("Be concise".into());
+        assert_eq!(builder.custom_instructions, "Be concise");
+    }
+
+    #[test]
+    fn test_builder_add_tool_increments_tools() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .add_tool(Arc::new(DummyTool))
+            .unwrap();
+        assert_eq!(builder.tools.len(), 2);
+        assert!(builder.tools.contains_key("dummy"));
+    }
+
+    #[tokio::test]
+    async fn test_builder_storage_sets_jsonl() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .storage(AgentStorageChoice::Jsonl)
+            .await
+            .unwrap();
+        // We cannot directly inspect the dyn type, but building should succeed
+        let _agent = builder.build();
+    }
+
+    #[tokio::test]
+    async fn test_builder_storage_sets_memory() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .storage(AgentStorageChoice::Memory)
+            .await
+            .unwrap();
+        let _agent = builder.build();
+    }
+
+    #[tokio::test]
+    async fn test_builder_storage_sets_sqlite() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .storage(AgentStorageChoice::Sqlite)
+            .await
+            .unwrap();
+        let _agent = builder.build();
+    }
+
+    // ------------------------------------------------------------------
+    // Build / resolve tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_build_sets_empty_history() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(())).build();
+        assert!(agent.history.is_empty());
+    }
+
+    #[test]
+    fn test_build_sets_tools_on_agent() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .add_tool(Arc::new(DummyTool))
+            .unwrap()
+            .build();
+        assert_eq!(agent.tools.len(), 2);
+    }
+
+    #[test]
+    fn test_build_sets_provider_on_agent() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("ollama".into())
+            .unwrap()
+            .build();
+        assert_eq!(agent.provider, SupportedProvider::Ollama);
+    }
+
+    #[test]
+    fn test_build_sets_model_on_agent() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .model("llama3.2".into())
+            .build();
+        assert_eq!(agent.model, "llama3.2");
+    }
+
+    #[test]
+    fn test_build_sets_parallel_tool_calls_on_agent() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .parallel_tool_calls(true)
+            .build();
+        assert!(agent.parallel_tool_calls);
+    }
+
+    #[test]
+    fn test_build_system_prompt_contains_base() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(())).build();
+        assert!(agent.system.contains("You are MicroAgent"));
+    }
+
+    #[test]
+    fn test_build_system_prompt_contains_tools() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .add_tool(Arc::new(DummyTool))
+            .unwrap()
+            .build();
+        assert!(agent.system.contains("<tools>"));
+        assert!(agent.system.contains("<name>dummy</name>"));
+    }
+
+    #[test]
+    fn test_build_system_prompt_contains_default_model_when_model_empty() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(())).build();
+        // Default provider is OpenAI -> default model is gpt-5.5
+        assert!(agent.system.contains("gpt-5.5"));
+    }
+
+    #[test]
+    fn test_build_system_prompt_contains_custom_model_when_set() {
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("groq".into())
+            .unwrap()
+            .model("custom-model".into())
+            .build();
+        assert!(agent.system.contains("custom-model"));
+        assert!(!agent.system.contains("llama-3.3-70b-versatile"));
+    }
+
+    // ------------------------------------------------------------------
+    // SupportedProvider tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_supported_provider_from_str_valid() {
+        assert_eq!(
+            SupportedProvider::from_str("openai").unwrap(),
+            SupportedProvider::OpenAI
+        );
+        assert_eq!(
+            SupportedProvider::from_str("openrouter").unwrap(),
+            SupportedProvider::OpenRouter
+        );
+        assert_eq!(
+            SupportedProvider::from_str("ollama").unwrap(),
+            SupportedProvider::Ollama
+        );
+        assert_eq!(
+            SupportedProvider::from_str("groq").unwrap(),
+            SupportedProvider::Groq
+        );
+    }
+
+    #[test]
+    fn test_supported_provider_from_str_invalid() {
+        assert!(SupportedProvider::from_str("azure").is_err());
+    }
+
+    #[test]
+    fn test_supported_provider_display() {
+        assert_eq!(SupportedProvider::OpenAI.to_string(), "openai");
+        assert_eq!(SupportedProvider::OpenRouter.to_string(), "openrouter");
+        assert_eq!(SupportedProvider::Ollama.to_string(), "ollama");
+        assert_eq!(SupportedProvider::Groq.to_string(), "groq");
+    }
+
+    #[test]
+    fn test_supported_provider_default_model() {
+        assert_eq!(SupportedProvider::OpenAI.default_model(), "gpt-5.5");
+        assert_eq!(SupportedProvider::Ollama.default_model(), "llama3.2");
+        assert_eq!(
+            SupportedProvider::Groq.default_model(),
+            "llama-3.3-70b-versatile"
+        );
+        assert_eq!(
+            SupportedProvider::OpenRouter.default_model(),
+            "anthropic/claude-opus-4.7"
+        );
+    }
+
+    #[test]
+    fn test_supported_provider_default_is_openai() {
+        let provider: SupportedProvider = Default::default();
+        assert_eq!(provider, SupportedProvider::OpenAI);
+    }
+
+    // ------------------------------------------------------------------
+    // DummyAgent mock tests
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_dummy_agent_generate_sets_flag() {
+        let mut agent = DummyAgent::new();
+        assert!(!agent.generate_called);
+        let _ = agent.generate().await;
+        assert!(agent.generate_called);
+    }
+
+    #[tokio::test]
+    async fn test_dummy_agent_generate_returns_stream() {
+        let mut agent = DummyAgent::new();
+        let mut stream = agent.generate().await.unwrap();
+        let item = stream.next().await;
+        assert!(item.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_dummy_agent_run_streams_prompt() {
+        let agent = DummyAgent::new();
+        let mut stream = agent
+            .run("hello".into(), Some("sid-123".into()))
+            .await
+            .unwrap();
+        // We consumed self in run, so we can't check the fields directly.
+        // Instead we verify via the yielded event.
+        let item = stream.next().await.unwrap().unwrap();
+        match item {
+            AgentEventAny::UserPromptSubmit(ev) => {
+                assert_eq!(ev.prompt, "hello");
+                assert_eq!(ev.session_id, "sid-123");
+            }
+            _ => panic!("expected UserPromptSubmit"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_dummy_agent_run_with_none_session_id() {
+        let agent = DummyAgent::new();
+        let mut stream = agent.run("test".into(), None).await.unwrap();
+        let item = stream.next().await.unwrap().unwrap();
+        match item {
+            AgentEventAny::UserPromptSubmit(ev) => {
+                assert_eq!(ev.session_id, "new");
+            }
+            _ => panic!("expected UserPromptSubmit"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_dummy_agent_run_stream_yields_single_event() {
+        let agent = DummyAgent::new();
+        let mut stream = agent.run("prompt".into(), None).await.unwrap();
+        let first = stream.next().await;
+        assert!(first.is_some());
+        let second = stream.next().await;
+        assert!(second.is_none());
     }
 }
