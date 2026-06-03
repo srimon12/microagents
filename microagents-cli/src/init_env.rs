@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::SystemTime;
@@ -196,7 +195,7 @@ fn collect_files() -> Result<HashMap<String, Document>, Box<dyn std::error::Erro
                 repl.clone(),
                 Document::new(
                     repl,
-                    meta.size(),
+                    meta.len(),
                     meta.modified()?
                         .duration_since(SystemTime::UNIX_EPOCH)?
                         .as_millis(),
