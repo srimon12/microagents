@@ -1,4 +1,3 @@
-use fs2::FileExt;
 use microagents_events::types::{AgentEvent, JsonRpcNotification};
 use microagents_events::{AgentEventAny, SessionInitEvent};
 use std::io::Read;
@@ -60,9 +59,7 @@ impl AgentStorage for JsonlAgentStorage {
             .append(true)
             .open(self.jsonl_path.join(format!("{}.jsonl", event.session_id)))?;
         let event_json = serde_json::to_string(&event.to_jsonrpc())?;
-        file.lock_exclusive()?;
         writeln!(file, "{}", event_json)?;
-        file.unlock()?;
         Ok(())
     }
 
@@ -72,9 +69,7 @@ impl AgentStorage for JsonlAgentStorage {
             self.jsonl_path
                 .join(format!("{}.jsonl", event.clone().session_id())),
         )?;
-        file.lock_exclusive()?;
         writeln!(file, "{}", serde_json::to_string(&event.to_jsonrpc())?)?;
-        file.unlock()?;
         Ok(())
     }
 
@@ -83,10 +78,8 @@ impl AgentStorage for JsonlAgentStorage {
         let mut file = OpenOptions::new()
             .read(true)
             .open(self.jsonl_path.join(format!("{session_id}.jsonl")))?;
-        file.lock_shared()?;
         let mut buf = String::new();
         file.read_to_string(&mut buf)?;
-        file.unlock()?;
         let mut events = vec![];
         for line in buf.lines() {
             let jsrpc: JsonRpcNotification = serde_json::from_str(line)?;
