@@ -104,13 +104,6 @@ mod tests {
 
     use super::*;
 
-    fn cleanup_test_file() {
-        let test_dir = PathBuf::from("test-sessions/");
-        if test_dir.exists() {
-            fs::remove_dir_all(test_dir).expect("Should be able to remove directory");
-        }
-    }
-
     #[test]
     fn test_default_init() {
         let jsonl = JsonlAgentStorage::default();
@@ -118,9 +111,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_create_session() {
-        let jsonl = JsonlAgentStorage::new(Some(PathBuf::from("test-sessions/")));
+        let tmp = tempfile::tempdir().unwrap();
+        let jsonl = JsonlAgentStorage::new(Some(tmp.path().to_path_buf()));
         jsonl
             .create_session(SessionInitEvent {
                 session_id: "1".to_string(),
@@ -132,7 +125,7 @@ mod tests {
             .await
             .expect("Should be able to create a session");
         let content =
-            fs::read_to_string("test-sessions/1.jsonl").expect("Should be able to read file");
+            fs::read_to_string(tmp.path().join("1.jsonl")).expect("Should be able to read file");
         let mut events = vec![];
         for line in content.lines() {
             let jsrpc: JsonRpcNotification =
@@ -145,13 +138,12 @@ mod tests {
             events[0].clone().to_jsonrpc().method,
             "session.init".to_string()
         );
-        cleanup_test_file();
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_create_update_get_session() {
-        let jsonl = JsonlAgentStorage::new(Some(PathBuf::from("test-sessions/")));
+        let tmp = tempfile::tempdir().unwrap();
+        let jsonl = JsonlAgentStorage::new(Some(tmp.path().to_path_buf()));
         jsonl
             .create_session(SessionInitEvent {
                 session_id: "1".to_string(),
@@ -209,6 +201,5 @@ mod tests {
             events[3].clone().to_jsonrpc().method,
             "session.stop".to_string()
         );
-        cleanup_test_file();
     }
 }

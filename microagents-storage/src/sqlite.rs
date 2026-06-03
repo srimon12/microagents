@@ -131,29 +131,23 @@ fn now_millis() -> anyhow::Result<i64> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use microagents_events::{AssistantResponseEvent, SessionStopEvent, UserPromptSubmitEvent};
 
     use super::*;
 
-    fn cleanup_test_file() {
-        let test_fl = PathBuf::from("test.db");
-        if test_fl.exists() {
-            fs::remove_file(test_fl).expect("Should be able to remove file");
-        }
-    }
-
     #[tokio::test]
     async fn test_default_init() {
-        let result = SqliteAgentStorage::new(None).await;
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("sessions.db");
+        let result = SqliteAgentStorage::new(Some(db_path.to_string_lossy().to_string())).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_create_session() {
-        let sql = SqliteAgentStorage::new(Some("test.db".to_string()))
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db");
+        let sql = SqliteAgentStorage::new(Some(db_path.to_string_lossy().to_string()))
             .await
             .expect("Should be able to open agent store");
         sql.create_session(SessionInitEvent {
@@ -195,13 +189,14 @@ mod tests {
             events[0].clone().to_jsonrpc().method,
             "session.init".to_string()
         );
-        cleanup_test_file();
+        // Connection is dropped when `sql` goes out of scope, then tmp dir is cleaned up
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_create_update_get_session() {
-        let sql = SqliteAgentStorage::new(Some("test.db".to_string()))
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db");
+        let sql = SqliteAgentStorage::new(Some(db_path.to_string_lossy().to_string()))
             .await
             .expect("Should be able to create sqlite store");
         sql.create_session(SessionInitEvent {
@@ -257,6 +252,6 @@ mod tests {
             events[3].clone().to_jsonrpc().method,
             "session.stop".to_string()
         );
-        cleanup_test_file();
+        // Connection is dropped when `sql` goes out of scope, then tmp dir is cleaned up
     }
 }

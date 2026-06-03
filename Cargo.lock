@@ -3378,6 +3378,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "tempfile",
  "tokio",
  "tokio-rusqlite",
 ]
