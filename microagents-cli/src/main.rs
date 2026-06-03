@@ -1,8 +1,10 @@
 use clap::Parser;
+use futures_util::StreamExt;
 use microagents_core::{
     agent::{MicroAgentBuilder, SupportedProvider},
     types::{Agent, AgentError, ToolExecutionContext},
 };
+use microagents_events::types::AgentEvent;
 use microagents_storage::types::AgentStorageChoice;
 use std::{str::FromStr, sync::Arc};
 
@@ -43,6 +45,14 @@ struct Args {
     /// Resume a previous session by id. If omitted, a new session is started.
     #[arg(long = "session-id", value_name = "ID")]
     session_id: Option<String>,
+
+    /// Prompt to run in headless mode
+    #[arg(long, short, default_value = None)]
+    prompt: Option<String>,
+
+    /// Whether to print some debug/info messages when initializing the environment
+    #[arg(long, short, default_value_t = false)]
+    verbose: bool,
 }
 
 fn storage_choice(storage: Option<String>) -> AgentStorageChoice {
@@ -112,9 +122,36 @@ async fn build_agent(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    initialize_environment().await?;
-    println!("Launching TUI...");
     let args = Args::parse();
+    initialize_environment(args.verbose).await?;
+    if args.verbose {
+        println!("Launching TUI...");
+    }
+    if let Some(p) = args.prompt {
+        let agent = build_agent(args.provider, args.model, args.storage, args.skill).await?;
+        let mut stream = agent
+            .run(p, args.session_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        while let Some(ev) = stream.next().await {
+            match ev {
+                Ok(e) => {
+                    let jsonrpc = serde_json::to_string(&e.to_jsonrpc())?;
+                    println!("{jsonrpc}");
+                }
+                Err(err) => {
+                    let jsonrpc = serde_json::to_string(&serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "error": { "code": -32603, "message": "Internal Server Error", "data": &err.to_string() }
+                    }))?;
+                    println!("{jsonrpc}");
+                    return Ok(());
+                }
+            }
+        }
+        return Ok(());
+    }
     let initial_session = args.session_id.clone();
     let load_history_storage = args.storage.clone();
     tui::run_with_session(

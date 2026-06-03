@@ -390,7 +390,9 @@ fn delete_files(to_delete: HashSet<String>) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-pub async fn initialize_environment() -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
+pub async fn initialize_environment(
+    verbose: bool,
+) -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
     let root_path = root_or_cwd()?;
     if !root_path.join(".microagents").exists() {
         fs::create_dir_all(root_path.join(".microagents"))?;
@@ -401,21 +403,27 @@ pub async fn initialize_environment() -> Result<(usize, usize, usize), Box<dyn s
     let _ = parser();
 
     let files = collect_files()?;
-    println!("Collected all the files in the current directory...");
+    if verbose {
+        println!("Collected all the files in the current directory...");
+    }
     let diff = diff_files(files)?;
 
-    println!(
-        "Computed diff for files: re-ingesting {:?} file(s), deleting {:?}",
-        diff.to_reingest().len(),
-        diff.deleted.len()
-    );
+    if verbose {
+        println!(
+            "Computed diff for files: re-ingesting {:?} file(s), deleting {:?}",
+            diff.to_reingest().len(),
+            diff.deleted.len()
+        );
+    }
 
     if diff.is_no_diff() {
         println!("No changes to apply!");
         return Ok((0, 0, 0));
     }
 
-    println!("Applying changes to detected diff files...");
+    if verbose {
+        println!("Applying changes to detected diff files...");
+    }
 
     delete_files(diff.to_delete())?;
     ingest_files(diff.to_reingest()).await?;

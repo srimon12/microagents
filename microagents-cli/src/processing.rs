@@ -135,3 +135,85 @@ pub fn embed_query(query: &str) -> (Vec<f32>, SparseVector) {
     let sparse_embd = bm25.embed_query(query);
     (dense_embd, sparse_embd)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_infer_language_from_extension() {
+        let test_cases: Vec<(&str, Option<Language>)> = vec![
+            (".ts", Some(Language::TypeScript)),
+            (".rs", Some(Language::Rust)),
+            (".cpp", Some(Language::Cpp)),
+            (".cs", Some(Language::CSharp)),
+            (".java", Some(Language::Java)),
+            (".js", Some(Language::TypeScript)),
+            (".tsx", Some(Language::TypeScript)),
+            (".jsx", Some(Language::TypeScript)),
+            (".py", Some(Language::Python)),
+            (".go", None),
+            (".zig", None),
+        ];
+        for tc in test_cases {
+            let inferred = infer_language_from_extension(tc.0);
+            assert_eq!(inferred, tc.1);
+        }
+    }
+
+    #[test]
+    fn test_code_chunking_produces_single_chunk() {
+        let rust_function = r#"fn hello_world() {
+    println!("Hello, world!");
+}"#;
+        let chunks = chunk(".rs", rust_function.to_string()).unwrap();
+        assert_eq!(
+            chunks.len(),
+            1,
+            "Expected a single chunk for a small function"
+        );
+        assert!(chunks[0].content.contains("hello_world"));
+    }
+
+    #[test]
+    fn test_text_chunking_small_paragraph() {
+        let paragraph = "This is a small paragraph with less than 1024 characters.";
+        assert!(paragraph.len() < 1024);
+        let chunks = chunk(".txt", paragraph.to_string()).unwrap();
+        assert_eq!(
+            chunks.len(),
+            1,
+            "Expected a single chunk for text under 1024 chars"
+        );
+        assert_eq!(chunks[0].content, paragraph);
+    }
+
+    #[test]
+    fn test_chunking_routes_code_vs_text() {
+        let code = "fn main() {}";
+        let text = "Just some plain text content.";
+
+        let code_chunks = chunk(".rs", code.to_string()).unwrap();
+        let text_chunks = chunk(".unknown", text.to_string()).unwrap();
+
+        assert_eq!(code_chunks.len(), 1);
+        assert_eq!(text_chunks.len(), 1);
+
+        assert!(
+            code_chunks[0].line_start.is_some(),
+            "Code chunks should have line numbers"
+        );
+        assert!(
+            code_chunks[0].line_end.is_some(),
+            "Code chunks should have line numbers"
+        );
+        assert!(
+            text_chunks[0].line_start.is_none(),
+            "Text chunks should not have line numbers"
+        );
+        assert!(
+            text_chunks[0].line_end.is_none(),
+            "Text chunks should not have line numbers"
+        );
+    }
+}

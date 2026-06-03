@@ -2,7 +2,7 @@ use std::path::Path;
 
 use microagents_cli::{
     init_env::{initialize_environment, load_qdrant_edge},
-    processing::embed_query,
+    processing::{chunk, embed, embed_query},
     search::search,
 };
 use qdrant_edge::CountRequest;
@@ -68,28 +68,28 @@ async fn test_initialize_environment() {
     std::env::set_current_dir(tmp.path())
         .expect("Should be able to change the current working directory");
     create_test_files(tmp.path());
-    let (created, modified, deleted) = initialize_environment()
+    let (created, modified, deleted) = initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
     assert_eq!(created, 4);
     assert_eq!(modified, 0);
     assert_eq!(deleted, 0);
     modify_test_file(tmp.path());
-    let (created_1, modified_1, deleted_1) = initialize_environment()
+    let (created_1, modified_1, deleted_1) = initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
     assert_eq!(created_1, 0);
     assert_eq!(modified_1, 1);
     assert_eq!(deleted_1, 0);
     delete_test_file(tmp.path());
-    let (created_2, modified_2, deleted_2) = initialize_environment()
+    let (created_2, modified_2, deleted_2) = initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
     assert_eq!(created_2, 0);
     assert_eq!(modified_2, 0);
     assert_eq!(deleted_2, 1);
     add_test_file(tmp.path());
-    let (created_3, modified_3, deleted_3) = initialize_environment()
+    let (created_3, modified_3, deleted_3) = initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
     assert_eq!(created_3, 1);
@@ -123,7 +123,7 @@ async fn test_search_vanilla() {
     std::env::set_current_dir(tmp.path())
         .expect("Should be able to change the current working directory");
     create_test_files(tmp.path());
-    initialize_environment()
+    initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
     let (dense, sparse) = embed_query("Hello World");
@@ -150,7 +150,7 @@ async fn test_search_filters() {
     std::env::set_current_dir(tmp.path())
         .expect("Should be able to change the current working directory");
     create_test_files(tmp.path());
-    initialize_environment()
+    initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
     let (dense, sparse) = embed_query("console.log('Hello World')");
@@ -168,4 +168,91 @@ async fn test_search_filters() {
     assert!(results.iter().all(|r| r.document_path.contains("test.ts")));
     std::env::set_current_dir(cur_dir)
         .expect("Should be able to change the current working directory");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_search_filters_no_exist() {
+    match std::env::var("RUN_CLI_TESTS") {
+        Ok(v) => {
+            if v != "true" {
+                return;
+            }
+        }
+        Err(_) => return,
+    }
+    let cur_dir = std::env::current_dir().expect("Should be able to find a current directory");
+    let tmp = tempfile::tempdir().expect("Should be able to create a temporary directory");
+    std::env::set_current_dir(tmp.path())
+        .expect("Should be able to change the current working directory");
+    create_test_files(tmp.path());
+    initialize_environment(false)
+        .await
+        .expect("Environment initialization should not fail");
+    let (dense, sparse) = embed_query("console.log('Hello World')");
+    let results = search(
+        dense,
+        sparse,
+        Some(vec![
+            "/private".to_string() + tmp.path().join("test.js").to_str().unwrap(),
+        ]),
+        None,
+        None,
+    )
+    .expect("Search should not fail");
+    assert_eq!(results.len(), 0);
+    std::env::set_current_dir(cur_dir)
+        .expect("Should be able to change the current working directory");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_search_limit() {
+    match std::env::var("RUN_CLI_TESTS") {
+        Ok(v) => {
+            if v != "true" {
+                return;
+            }
+        }
+        Err(_) => return,
+    }
+    let cur_dir = std::env::current_dir().expect("Should be able to find a current directory");
+    let tmp = tempfile::tempdir().expect("Should be able to create a temporary directory");
+    std::env::set_current_dir(tmp.path())
+        .expect("Should be able to change the current working directory");
+    create_test_files(tmp.path());
+    initialize_environment(false)
+        .await
+        .expect("Environment initialization should not fail");
+    let (dense, sparse) = embed_query("Hello World");
+    let results = search(dense, sparse, None, Some(2), None).expect("Search should not fail");
+    assert_eq!(results.len(), 2);
+    std::env::set_current_dir(cur_dir)
+        .expect("Should be able to change the current working directory");
+}
+
+#[test]
+fn test_chunking_and_embedding() {
+    let code = r#"
+def hello_world() -> None:
+    print('Hello world!')
+
+if __name__ == '__main__':
+    hello_world()
+"#;
+    let text = "This is a small text paragraph that should be chunked as one";
+    let mut chunks_code =
+        chunk(".py", code.to_string()).expect("Should be able to chunk the given text");
+    let mut chunks_text =
+        chunk(".txt", text.to_string()).expect("Should be able to chunk the given text");
+    chunks_code.append(&mut chunks_text);
+    chunks_code = embed(&mut chunks_code);
+    assert!(chunks_code.len() >= 2);
+    for c in chunks_code {
+        assert!(c.embedding.is_some_and(|e| e.len() == 256));
+        assert!(c.sparse_embedding.is_some());
+        if c.line_start.is_some() && c.line_end.is_some() {
+            assert!(c.content.contains("hello_world"));
+        }
+    }
 }
