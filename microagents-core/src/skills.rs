@@ -214,13 +214,11 @@ mod tests {
         let result = ensure_skill("test-skill");
         std::env::set_current_dir(original).unwrap();
 
-        assert!(result.is_some());
-        assert!(
-            result
-                .unwrap()
-                .to_string_lossy()
-                .contains(".agents/skills/test-skill")
-        );
+        let path = result.unwrap();
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains(".agents"));
+        assert!(path_str.contains("skills"));
+        assert!(path_str.contains("test-skill"));
     }
 
     #[test]

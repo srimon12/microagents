@@ -328,14 +328,14 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| AgentEventError::MissingField("system".to_string()))?
                     .to_string(),
-                init_type: value
-                    .params
-                    .get("init_type")
-                    .and_then(|v| match v.as_str() {
-                        Some(s) => SessionInitType::from_str(s).ok(),
-                        None => None,
-                    })
-                    .ok_or_else(|| AgentEventError::MissingField("init_type".to_string()))?,
+                init_type: {
+                    let raw = value
+                        .params
+                        .get("init_type")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| AgentEventError::MissingField("init_type".to_string()))?;
+                    SessionInitType::from_str(raw)?
+                },
             })),
             "session.stop" => Ok(Self::SessionStop(SessionStopEvent {
                 session_id,

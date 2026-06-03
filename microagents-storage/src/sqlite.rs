@@ -26,6 +26,11 @@ pub struct SqliteAgentStorage {
 impl SqliteAgentStorage {
     pub async fn new(db_path: Option<String>) -> anyhow::Result<Self> {
         let path = db_path.unwrap_or(sqlite_session_storage().to_string_lossy().to_string());
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
         let connection = Connection::open(path).await?;
         let storage = Self { connection };
         storage.ensure_table_and_idx().await?;
