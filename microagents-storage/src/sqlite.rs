@@ -12,8 +12,10 @@ use tokio::sync::Mutex;
 use tokio_rusqlite::Connection;
 use tokio_rusqlite::rusqlite;
 
+/// Global default path for the SQLite sessions database.
 pub static SQLITE_SESSION_STORAGE: OnceLock<PathBuf> = OnceLock::new();
 
+/// Return the default SQLite database path (`~/.microagents/sessions.db`).
 pub fn sqlite_session_storage() -> &'static PathBuf {
     SQLITE_SESSION_STORAGE.get_or_init(|| {
         dirs::home_dir()
@@ -23,12 +25,16 @@ pub fn sqlite_session_storage() -> &'static PathBuf {
     })
 }
 
+/// SQLite-backed implementation of [`AgentStorage`].
 #[derive(Debug, Clone)]
 pub struct SqliteAgentStorage {
     connection: Arc<Mutex<Connection>>,
 }
 
 impl SqliteAgentStorage {
+    /// Open (or create) the SQLite database at `db_path` and ensure the events table exists.
+    ///
+    /// If `db_path` is `None`, the default path from [`sqlite_session_storage`] is used.
     pub async fn new(db_path: Option<&str>) -> anyhow::Result<Self> {
         let path = db_path.unwrap_or(sqlite_session_storage().to_str().unwrap());
         if let Some(parent) = std::path::Path::new(&path).parent()

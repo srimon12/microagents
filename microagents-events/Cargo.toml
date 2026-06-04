@@ -2,6 +2,11 @@
 name = "microagents-events"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/AstraBert/microagents"
+description = "Typed-, JSONRPC-compatible events definitions for the microagents framework"
+keywords = ["ai", "agents", "typed-events", "jsonrpc"]
 
 [dependencies]
 chrono = { version = "0.4.45", features = ["serde"] }

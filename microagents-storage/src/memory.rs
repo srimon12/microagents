@@ -4,6 +4,9 @@ use tokio::sync::RwLock;
 
 use crate::types::AgentStorage;
 
+/// In-memory implementation of [`AgentStorage`].
+///
+/// All data is lost when the process exits.
 #[derive(Debug)]
 pub struct InMemoryAgentStorage {
     sessions: Arc<RwLock<HashMap<String, Vec<AgentEventAny>>>>,

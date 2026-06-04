@@ -6,8 +6,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::types::AgentStorage;
 
+/// Global default directory for JSONL session files.
 pub static JSONL_SESSION_STORAGE: OnceLock<PathBuf> = OnceLock::new();
 
+/// Return the default JSONL storage directory (`~/.microagents/sessions`).
 pub fn jsonl_session_storage() -> &'static PathBuf {
     JSONL_SESSION_STORAGE.get_or_init(|| {
         dirs::home_dir()
@@ -17,8 +19,12 @@ pub fn jsonl_session_storage() -> &'static PathBuf {
     })
 }
 
+/// JSON Lines file-based implementation of [`AgentStorage`].
+///
+/// Each session is stored as a separate `.jsonl` file under `jsonl_path`.
 #[derive(Debug)]
 pub struct JsonlAgentStorage {
+    /// Directory where session `.jsonl` files are written.
     pub jsonl_path: PathBuf,
 }
 
@@ -31,6 +37,9 @@ impl Default for JsonlAgentStorage {
 }
 
 impl JsonlAgentStorage {
+    /// Create a new [`JsonlAgentStorage`].
+    ///
+    /// If `jsonl_path` is `None`, the default directory from [`jsonl_session_storage`] is used.
     pub fn new(jsonl_path: Option<PathBuf>) -> Self {
         Self {
             jsonl_path: jsonl_path.unwrap_or(jsonl_session_storage().to_owned()),
