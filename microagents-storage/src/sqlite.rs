@@ -35,8 +35,8 @@ impl SqliteAgentStorage {
     /// Open (or create) the SQLite database at `db_path` and ensure the events table exists.
     ///
     /// If `db_path` is `None`, the default path from [`sqlite_session_storage`] is used.
-    pub async fn new(db_path: Option<&str>) -> anyhow::Result<Self> {
-        let path = db_path.unwrap_or(sqlite_session_storage().to_str().unwrap());
+    pub async fn new(db_path: Option<&PathBuf>) -> anyhow::Result<Self> {
+        let path = db_path.unwrap_or(sqlite_session_storage());
         if let Some(parent) = std::path::Path::new(&path).parent()
             && !parent.exists()
         {
@@ -133,15 +133,14 @@ impl AgentStorage for SqliteAgentStorage {
                 )
                 .await?;
 
-        let mut events: Vec<AgentEventAny> = rows
-            .into_iter()
-            .map(|(_, payload)| {
-                let jrpc: JsonRpcNotification = serde_json::from_str(&payload).unwrap();
-                AgentEventAny::try_from(jrpc)
-                    .map_err(|e| anyhow::anyhow!(e.to_string()))
-                    .unwrap()
-            })
-            .collect();
+        let mut events: Vec<AgentEventAny> = Vec::with_capacity(rows.len());
+        for (_, payload) in rows {
+            let jrpc: JsonRpcNotification = serde_json::from_str(&payload)
+                .map_err(|e| anyhow::anyhow!("Invalid JSON payload in events table: {e}"))?;
+            let event = AgentEventAny::try_from(jrpc)
+                .map_err(|e| anyhow::anyhow!("Invalid event payload in events table: {e}"))?;
+            events.push(event);
+        }
         events.sort_by_key(|a| a.timestamp());
         Ok(events)
     }
@@ -165,7 +164,7 @@ mod tests {
     async fn test_default_init() {
         let tmp = tempfile::tempdir().unwrap();
         let db_path = tmp.path().join("sessions.db");
-        let result = SqliteAgentStorage::new(db_path.to_str()).await;
+        let result = SqliteAgentStorage::new(Some(&db_path)).await;
         assert!(result.is_ok());
     }
 
@@ -173,7 +172,7 @@ mod tests {
     async fn test_create_session() {
         let tmp = tempfile::tempdir().unwrap();
         let db_path = tmp.path().join("test.db");
-        let sql = SqliteAgentStorage::new(db_path.to_str())
+        let sql = SqliteAgentStorage::new(Some(&db_path))
             .await
             .expect("Should be able to open agent store");
         sql.create_session(SessionInitEvent {
@@ -225,7 +224,7 @@ mod tests {
     async fn test_create_update_get_session() {
         let tmp = tempfile::tempdir().unwrap();
         let db_path = tmp.path().join("test.db");
-        let sql = SqliteAgentStorage::new(db_path.to_str())
+        let sql = SqliteAgentStorage::new(Some(&db_path))
             .await
             .expect("Should be able to create sqlite store");
         sql.create_session(SessionInitEvent {
