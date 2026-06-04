@@ -53,6 +53,7 @@ pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
             let result = match p.result {
                 ToolResult::Ok(r) => format!("Tool call succeeded: {}", r),
                 ToolResult::Err(r) => format!("Tool call failed: {}", r),
+                _ => unreachable!("ToolResult should not reach this branch"),
             };
             Some(Message {
                 role: Role::Tool,
@@ -101,6 +102,7 @@ pub async fn call_tool<Ctx: Send + Sync + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use microagents_events::{
         AssistantResponseEvent, SessionInitEvent, SessionInitType, SessionStopEvent,
         SkillLoadEvent, StreamDeltaEvent, ToolCallEvent, ToolResultEvent, UserPromptSubmitEvent,
@@ -113,6 +115,7 @@ mod tests {
             session_id: "s1".into(),
             turn_id: "t1".into(),
             prompt: "hello".into(),
+            timestamp: Utc::now(),
         });
         let msg = convert_event_to_message(event).unwrap();
         assert_eq!(msg.role, Role::User);
@@ -128,6 +131,7 @@ mod tests {
             turn_id: "t1".into(),
             full_text: "hi there".into(),
             tool_calls: None,
+            timestamp: Utc::now(),
         });
         let msg = convert_event_to_message(event).unwrap();
         assert_eq!(msg.role, Role::Assistant);
@@ -149,6 +153,7 @@ mod tests {
                     arguments: "{\"x\":1}".into(),
                 },
             }]),
+            timestamp: Utc::now(),
         });
         let msg = convert_event_to_message(event).unwrap();
         assert_eq!(msg.role, Role::Assistant);
@@ -166,6 +171,7 @@ mod tests {
             turn_id: "t1".into(),
             result: ToolResult::Ok("done".into()),
             tool_call_id: "tc1".into(),
+            timestamp: Utc::now(),
         });
         let msg = convert_event_to_message(event).unwrap();
         assert_eq!(msg.role, Role::Tool);
@@ -180,6 +186,7 @@ mod tests {
             turn_id: "t1".into(),
             result: ToolResult::Err("oops".into()),
             tool_call_id: "tc2".into(),
+            timestamp: Utc::now(),
         });
         let msg = convert_event_to_message(event).unwrap();
         assert_eq!(msg.role, Role::Tool);
@@ -196,6 +203,7 @@ mod tests {
                 provider: "p".into(),
                 system: "sys".into(),
                 init_type: SessionInitType::Start,
+                timestamp: Utc::now(),
             }))
             .is_none()
         );
@@ -206,6 +214,7 @@ mod tests {
                 success: true,
                 result: None,
                 error: None,
+                timestamp: Utc::now(),
             }))
             .is_none()
         );
@@ -216,6 +225,7 @@ mod tests {
                 turn_id: "t1".into(),
                 delta: "d".into(),
                 delta_type: microagents_events::DeltaType::Text,
+                timestamp: Utc::now(),
             }))
             .is_none()
         );
@@ -226,6 +236,7 @@ mod tests {
                 turn_id: "t1".into(),
                 name: "tool".into(),
                 input: Value::Null,
+                timestamp: Utc::now(),
             }))
             .is_none()
         );
@@ -235,6 +246,7 @@ mod tests {
                 session_id: "s1".into(),
                 turn_id: "t1".into(),
                 skill_name: "skill".into(),
+                timestamp: Utc::now(),
             }))
             .is_none()
         );

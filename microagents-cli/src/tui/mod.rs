@@ -165,6 +165,7 @@ impl App {
                 let kind = match s.init_type {
                     microagents_events::SessionInitType::Start => "started",
                     microagents_events::SessionInitType::Resume => "resumed",
+                    _ => unreachable!("SessionInitType should not reach this branch"),
                 };
                 self.push(Msg::Session(format!(
                     "session {} • {} • {}/{}",
@@ -216,6 +217,7 @@ impl App {
                     }
                 }
             }
+            _ => unreachable!("AgentEventAny should not reach this branch"),
         }
     }
 }
@@ -540,6 +542,7 @@ fn block_lines(block: &Msg) -> Vec<Line<'static>> {
                 };
                 prefixed_inline("  ✗ ", theme::TOOL_ERR, &actual_res, theme::TOOL_ERR)
             }
+            _ => unreachable!("ToolResult should not reach this branch"),
         },
         Msg::Skill(name) => vec![Line::from(vec![
             Span::styled("  ✧ ", Style::default().fg(theme::SKILL)),

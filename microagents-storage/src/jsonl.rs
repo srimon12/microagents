@@ -93,6 +93,7 @@ impl AgentStorage for JsonlAgentStorage {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use microagents_events::{AssistantResponseEvent, SessionStopEvent, UserPromptSubmitEvent};
 
     use super::*;
@@ -114,6 +115,7 @@ mod tests {
                 provider: "openai".into(),
                 system: "you are a helpful assistant".into(),
                 init_type: microagents_events::SessionInitType::Start,
+                timestamp: Utc::now(),
             })
             .await
             .expect("Should be able to create a session");
@@ -144,6 +146,7 @@ mod tests {
                 provider: "openai".into(),
                 system: "you are a helpful assistant".into(),
                 init_type: microagents_events::SessionInitType::Start,
+                timestamp: Utc::now(),
             })
             .await
             .expect("Should be able to create a session");
@@ -152,6 +155,7 @@ mod tests {
                 prompt: "hello".to_string(),
                 session_id: "1".to_string(),
                 turn_id: "t1".to_string(),
+                timestamp: Utc::now(),
             }))
             .await
             .expect("Should be able to update memory");
@@ -161,6 +165,7 @@ mod tests {
                 turn_id: "t1".to_string(),
                 full_text: "hello".to_string(),
                 tool_calls: None,
+                timestamp: Utc::now(),
             }))
             .await
             .expect("Should be able to update memory");
@@ -170,6 +175,7 @@ mod tests {
                 result: Some("hello".to_string()),
                 error: None,
                 success: true,
+                timestamp: Utc::now(),
             }))
             .await
             .expect("Should be able to update memory");

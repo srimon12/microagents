@@ -16,3 +16,4 @@ tokio-rusqlite = {version = "0.7.0", features = ["serde_json", "bundled-windows"
 [dev-dependencies]
 serial_test = "3.5.0"
 tempfile = "3"
+chrono = { version = "0.4.45", features = ["serde"] }

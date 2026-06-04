@@ -1,13 +1,18 @@
 pub mod types;
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use std::{convert::TryFrom, str::FromStr};
+use std::{convert::TryFrom, fmt};
 
 use crate::types::{AgentEvent, AgentEventError, JsonRpcNotification, ToolCall, ToolResult};
 
+pub const EVENTS_PROTOCOL_VERSION: &str = "0.1.0";
+
 /// Indicates whether a session is being started fresh or resumed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum SessionInitType {
     /// Start a new session.
     Start,
@@ -15,37 +20,47 @@ pub enum SessionInitType {
     Resume,
 }
 
-impl From<SessionInitType> for Value {
-    fn from(value: SessionInitType) -> Self {
-        match value {
-            SessionInitType::Start => Value::from("start"),
-            SessionInitType::Resume => Value::from("resume"),
+impl fmt::Display for SessionInitType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Start => write!(f, "start"),
+            Self::Resume => write!(f, "resume"),
         }
     }
 }
 
-impl FromStr for SessionInitType {
-    type Err = AgentEventError;
+impl TryFrom<&str> for SessionInitType {
+    type Error = AgentEventError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
             "start" => Ok(Self::Start),
             "resume" => Ok(Self::Resume),
             _ => Err(AgentEventError::InvalidFieldType(format!(
                 "No init type with message: {}",
-                s
+                value
             ))),
         }
     }
 }
 
 /// Type of content delta in a stream.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum DeltaType {
     /// Regular text content.
     Text,
     /// Model thinking or reasoning content.
     Thinking,
+}
+
+impl fmt::Display for DeltaType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Text => write!(f, "text"),
+            Self::Thinking => write!(f, "thinking"),
+        }
+    }
 }
 
 impl From<DeltaType> for Value {
@@ -58,7 +73,7 @@ impl From<DeltaType> for Value {
 }
 
 /// Event emitted when a session is initialized.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInitEvent {
     pub session_id: String,
     pub model: String,
@@ -66,68 +81,76 @@ pub struct SessionInitEvent {
     pub system: String,
     /// Either `'new'` or `'resume'`.
     pub init_type: SessionInitType,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Event emitted when a session stops.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionStopEvent {
     pub session_id: String,
     pub success: bool,
     pub result: Option<String>,
     pub error: Option<String>,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Event emitted when the user submits a prompt.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPromptSubmitEvent {
     pub session_id: String,
     pub turn_id: String,
     pub prompt: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Event emitted for each delta in a streaming response.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamDeltaEvent {
     pub session_id: String,
     pub turn_id: String,
     pub delta: String,
     pub delta_type: DeltaType,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Event emitted when a tool is called.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallEvent {
     pub session_id: String,
     pub turn_id: String,
     pub name: String,
     pub input: Value,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Event emitted when a tool returns a result.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolResultEvent {
     pub session_id: String,
     pub turn_id: String,
     /// Tool execution result. [`Value`] implements `From<ToolResult>`.
     pub result: ToolResult,
     pub tool_call_id: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Event emitted when a skill is loaded.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillLoadEvent {
     pub session_id: String,
     pub turn_id: String,
     pub skill_name: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Event emitted when the assistant produces a complete response.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssistantResponseEvent {
     pub session_id: String,
     pub turn_id: String,
     pub full_text: String,
     pub tool_calls: Option<Vec<ToolCall>>,
+    pub timestamp: DateTime<Utc>,
 }
 
 impl AgentEvent for SessionInitEvent {
@@ -138,7 +161,14 @@ impl AgentEvent for SessionInitEvent {
             .add_param("system".into(), Value::from(self.system))
             .add_param("model".into(), Value::from(self.model))
             .add_param("provider".into(), Value::from(self.provider))
-            .add_param("init_type".into(), Value::from(self.init_type))
+            .add_param(
+                "init_type".into(),
+                serde_json::to_value(self.init_type).unwrap(),
+            )
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
     }
 
     fn session_id(self) -> String {
@@ -154,6 +184,10 @@ impl AgentEvent for SessionStopEvent {
             .add_param("success".into(), Value::from(self.success))
             .add_param("result".into(), Value::from(self.result))
             .add_param("error".into(), Value::from(self.error))
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
     }
 
     fn session_id(self) -> String {
@@ -168,6 +202,10 @@ impl AgentEvent for UserPromptSubmitEvent {
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("turn_id".into(), Value::from(self.turn_id))
             .add_param("prompt".into(), Value::from(self.prompt))
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
     }
 
     fn session_id(self) -> String {
@@ -182,7 +220,14 @@ impl AgentEvent for StreamDeltaEvent {
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("turn_id".into(), Value::from(self.turn_id))
             .add_param("delta".into(), Value::from(self.delta))
-            .add_param("delta_type".into(), Value::from(self.delta_type))
+            .add_param(
+                "delta_type".into(),
+                serde_json::to_value(self.delta_type).unwrap(),
+            )
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
     }
 
     fn session_id(self) -> String {
@@ -198,6 +243,10 @@ impl AgentEvent for ToolCallEvent {
             .add_param("turn_id".into(), Value::from(self.turn_id))
             .add_param("name".into(), Value::from(self.name))
             .add_param("input".into(), self.input)
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
     }
 
     fn session_id(self) -> String {
@@ -211,8 +260,12 @@ impl AgentEvent for ToolResultEvent {
             .method("tool.result".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("turn_id".into(), Value::from(self.turn_id))
-            .add_param("result".into(), Value::from(self.result))
+            .add_param("result".into(), serde_json::to_value(&self.result).unwrap())
             .add_param("tool_call_id".into(), Value::from(self.tool_call_id))
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
     }
 
     fn session_id(self) -> String {
@@ -227,6 +280,10 @@ impl AgentEvent for SkillLoadEvent {
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("turn_id".into(), Value::from(self.turn_id))
             .add_param("skill_name".into(), Value::from(self.skill_name))
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
     }
 
     fn session_id(self) -> String {
@@ -241,7 +298,18 @@ impl AgentEvent for AssistantResponseEvent {
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("turn_id".into(), Value::from(self.turn_id))
             .add_param("full_text".into(), Value::from(self.full_text))
-            .add_param("tool_calls".into(), Value::from(self.tool_calls))
+            .add_param(
+                "tool_calls".into(),
+                Value::from(self.tool_calls.map(|tcs| {
+                    tcs.iter()
+                        .map(|tc| serde_json::to_value(tc).unwrap())
+                        .collect::<Vec<Value>>()
+                })),
+            )
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
     }
 
     fn session_id(self) -> String {
@@ -251,6 +319,7 @@ impl AgentEvent for AssistantResponseEvent {
 
 /// A sum type wrapping any agent event.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum AgentEventAny {
     SessionInit(SessionInitEvent),
     SessionStop(SessionStopEvent),
@@ -332,9 +401,19 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     let raw = value
                         .params
                         .get("init_type")
-                        .and_then(|v| v.as_str())
                         .ok_or_else(|| AgentEventError::MissingField("init_type".to_string()))?;
-                    SessionInitType::from_str(raw)?
+                    let init_type: SessionInitType = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("init_type".to_string()))?;
+                    init_type
+                },
+                timestamp: {
+                    let raw = value
+                        .params
+                        .get("timestamp")
+                        .ok_or_else(|| AgentEventError::MissingField("timestamp".to_string()))?;
+                    let tms: DateTime<Utc> = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("timestamp".to_string()))?;
+                    tms
                 },
             })),
             "session.stop" => Ok(Self::SessionStop(SessionStopEvent {
@@ -354,6 +433,15 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     .get("error")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
+                timestamp: {
+                    let raw = value
+                        .params
+                        .get("timestamp")
+                        .ok_or_else(|| AgentEventError::MissingField("timestamp".to_string()))?;
+                    let tms: DateTime<Utc> = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("timestamp".to_string()))?;
+                    tms
+                },
             })),
             "user.prompt.submit" => Ok(Self::UserPromptSubmit(UserPromptSubmitEvent {
                 session_id,
@@ -364,6 +452,15 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| AgentEventError::MissingField("prompt".to_string()))?
                     .to_string(),
+                timestamp: {
+                    let raw = value
+                        .params
+                        .get("timestamp")
+                        .ok_or_else(|| AgentEventError::MissingField("timestamp".to_string()))?;
+                    let tms: DateTime<Utc> = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("timestamp".to_string()))?;
+                    tms
+                },
             })),
             "stream.delta" => Ok(Self::StreamDelta(StreamDeltaEvent {
                 session_id,
@@ -374,14 +471,23 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| AgentEventError::MissingField("delta".to_string()))?
                     .to_string(),
-                delta_type: match value
-                    .params
-                    .get("delta_type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("text")
-                {
-                    "thinking" => DeltaType::Thinking,
-                    _ => DeltaType::Text,
+                delta_type: {
+                    let raw = value
+                        .params
+                        .get("delta_type")
+                        .ok_or_else(|| AgentEventError::MissingField("delta_type".into()))?;
+                    let dt: DeltaType = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("delta_type".to_string()))?;
+                    dt
+                },
+                timestamp: {
+                    let raw = value
+                        .params
+                        .get("timestamp")
+                        .ok_or_else(|| AgentEventError::MissingField("timestamp".to_string()))?;
+                    let tms: DateTime<Utc> = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("timestamp".to_string()))?;
+                    tms
                 },
             })),
             "tool.call" => Ok(Self::ToolCall(ToolCallEvent {
@@ -394,28 +500,23 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     .ok_or_else(|| AgentEventError::MissingField("name".to_string()))?
                     .to_string(),
                 input: value.params.get("input").cloned().unwrap_or(Value::Null),
+                timestamp: {
+                    let raw = value
+                        .params
+                        .get("timestamp")
+                        .ok_or_else(|| AgentEventError::MissingField("timestamp".to_string()))?;
+                    let tms: DateTime<Utc> = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("timestamp".to_string()))?;
+                    tms
+                },
             })),
             "tool.result" => {
-                let success = value
-                    .params
-                    .get("result")
-                    .and_then(|v| v["success"].as_bool())
-                    .ok_or_else(|| AgentEventError::InvalidFieldType("success".to_string()))?;
                 let result = value
                     .params
                     .get("result")
-                    .and_then(|v| v["result"].as_str())
-                    .map(|s| s.to_string());
-                let error = value
-                    .params
-                    .get("result")
-                    .and_then(|v| v["error"].as_str())
-                    .map(|s| s.to_string());
-                let tool_result = if success {
-                    ToolResult::Ok(result.unwrap_or_default())
-                } else {
-                    ToolResult::Err(error.unwrap_or_default())
-                };
+                    .ok_or_else(|| AgentEventError::MissingField("result".to_string()))?;
+                let tool_result: ToolResult = serde_json::from_value(result.to_owned())
+                    .map_err(|_| AgentEventError::InvalidFieldType("result".to_string()))?;
                 Ok(Self::ToolResult(ToolResultEvent {
                     session_id,
                     turn_id,
@@ -426,6 +527,16 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| AgentEventError::MissingField("tool_call_id".to_string()))?
                         .to_string(),
+                    timestamp: {
+                        let raw = value.params.get("timestamp").ok_or_else(|| {
+                            AgentEventError::MissingField("timestamp".to_string())
+                        })?;
+                        let tms: DateTime<Utc> =
+                            serde_json::from_value(raw.to_owned()).map_err(|_| {
+                                AgentEventError::InvalidFieldType("timestamp".to_string())
+                            })?;
+                        tms
+                    },
                 }))
             }
             "skill.load" => Ok(Self::SkillLoad(SkillLoadEvent {
@@ -437,12 +548,27 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| AgentEventError::MissingField("skill_name".to_string()))?
                     .to_string(),
+                timestamp: {
+                    let raw = value
+                        .params
+                        .get("timestamp")
+                        .ok_or_else(|| AgentEventError::MissingField("timestamp".to_string()))?;
+                    let tms: DateTime<Utc> = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("timestamp".to_string()))?;
+                    tms
+                },
             })),
             "assistant.response" => {
                 let tool_calls = value.params.get("tool_calls").and_then(|v| match v {
                     Value::Array(arr) => arr
                         .iter()
-                        .map(|a| ToolCall::try_from(a.clone()))
+                        .map(|a| {
+                            let tc: Result<ToolCall, AgentEventError> =
+                                serde_json::from_value(a.to_owned()).map_err(|_| {
+                                    AgentEventError::InvalidFieldType("tool_calls".into())
+                                });
+                            tc
+                        })
                         .collect::<Result<Vec<_>, _>>()
                         .ok(),
                     _ => None,
@@ -457,6 +583,16 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                         .ok_or_else(|| AgentEventError::MissingField("full_text".to_string()))?
                         .to_string(),
                     tool_calls,
+                    timestamp: {
+                        let raw = value.params.get("timestamp").ok_or_else(|| {
+                            AgentEventError::MissingField("timestamp".to_string())
+                        })?;
+                        let tms: DateTime<Utc> =
+                            serde_json::from_value(raw.to_owned()).map_err(|_| {
+                                AgentEventError::InvalidFieldType("timestamp".to_string())
+                            })?;
+                        tms
+                    },
                 }))
             }
             method => Err(AgentEventError::UnknownMethod(method.to_string())),
@@ -471,25 +607,29 @@ mod tests {
 
     #[test]
     fn session_init_type_from_value() {
-        assert_eq!(Value::from(SessionInitType::Start), Value::from("start"));
-        assert_eq!(Value::from(SessionInitType::Resume), Value::from("resume"));
+        let start: SessionInitType = serde_json::from_value(Value::from("Start"))
+            .expect("Should be able to convert to SessionInitType");
+        let resume: SessionInitType = serde_json::from_value(Value::from("Resume"))
+            .expect("Should be able to convert to SessionInitType");
+        assert!(matches!(start, SessionInitType::Start));
+        assert!(matches!(resume, SessionInitType::Resume));
     }
 
     #[test]
     fn session_init_type_from_str_ok() {
         assert!(matches!(
-            SessionInitType::from_str("start"),
+            SessionInitType::try_from("start"),
             Ok(SessionInitType::Start)
         ));
         assert!(matches!(
-            SessionInitType::from_str("resume"),
+            SessionInitType::try_from("resume"),
             Ok(SessionInitType::Resume)
         ));
     }
 
     #[test]
     fn session_init_type_from_str_err() {
-        let err = SessionInitType::from_str("unknown").unwrap_err();
+        let err = SessionInitType::try_from("unknown").unwrap_err();
         assert!(matches!(err, AgentEventError::InvalidFieldType(_)));
         assert!(
             err.to_string()
@@ -511,6 +651,7 @@ mod tests {
             provider: "openai".into(),
             system: "sys".into(),
             init_type: SessionInitType::Start,
+            timestamp: Utc::now(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "session.init");
@@ -518,7 +659,7 @@ mod tests {
         assert_eq!(rpc.params.get("model"), Some(&Value::from("gpt-4")));
         assert_eq!(rpc.params.get("provider"), Some(&Value::from("openai")));
         assert_eq!(rpc.params.get("system"), Some(&Value::from("sys")));
-        assert_eq!(rpc.params.get("init_type"), Some(&Value::from("start")));
+        assert_eq!(rpc.params.get("init_type"), Some(&Value::from("Start")));
     }
 
     #[test]
@@ -528,6 +669,7 @@ mod tests {
             success: true,
             result: Some("done".into()),
             error: None,
+            timestamp: Utc::now(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "session.stop");
@@ -542,6 +684,7 @@ mod tests {
             session_id: "s1".into(),
             turn_id: "t1".into(),
             prompt: "hello".into(),
+            timestamp: Utc::now(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "user.prompt.submit");
@@ -555,11 +698,12 @@ mod tests {
             turn_id: "t1".into(),
             delta: "world".into(),
             delta_type: DeltaType::Thinking,
+            timestamp: Utc::now(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "stream.delta");
         assert_eq!(rpc.params.get("delta"), Some(&Value::from("world")));
-        assert_eq!(rpc.params.get("delta_type"), Some(&Value::from("thinking")));
+        assert_eq!(rpc.params.get("delta_type"), Some(&Value::from("Thinking")));
     }
 
     #[test]
@@ -569,6 +713,7 @@ mod tests {
             turn_id: "t1".into(),
             name: "read".into(),
             input: json!({"path": "/tmp"}),
+            timestamp: Utc::now(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "tool.call");
@@ -583,14 +728,12 @@ mod tests {
             turn_id: "t1".into(),
             result: ToolResult::Ok("ok".into()),
             tool_call_id: "tc1".into(),
+            timestamp: Utc::now(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "tool.result");
         assert_eq!(rpc.params.get("tool_call_id"), Some(&Value::from("tc1")));
-        assert_eq!(
-            rpc.params.get("result"),
-            Some(&json!({"success": true, "result": "ok", "error": Value::Null}))
-        );
+        assert_eq!(rpc.params.get("result"), Some(&json!({"Ok": "ok"})));
     }
 
     #[test]
@@ -599,6 +742,7 @@ mod tests {
             session_id: "s1".into(),
             turn_id: "t1".into(),
             skill_name: "coding".into(),
+            timestamp: Utc::now(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "skill.load");
@@ -612,6 +756,7 @@ mod tests {
             turn_id: "t1".into(),
             full_text: "hi".into(),
             tool_calls: None,
+            timestamp: Utc::now(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "assistant.response");
@@ -627,6 +772,7 @@ mod tests {
             provider: "p".into(),
             system: "s".into(),
             init_type: SessionInitType::Start,
+            timestamp: Utc::now(),
         });
         assert_eq!(event.session_id(), "sid");
     }
@@ -637,6 +783,7 @@ mod tests {
             session_id: "s1".into(),
             turn_id: "t1".into(),
             prompt: "p".into(),
+            timestamp: Utc::now(),
         });
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "user.prompt.submit");
@@ -651,7 +798,11 @@ mod tests {
             .add_param("model".into(), Value::from("gpt-4"))
             .add_param("provider".into(), Value::from("openai"))
             .add_param("system".into(), Value::from("sys"))
-            .add_param("init_type".into(), Value::from("resume"));
+            .add_param("init_type".into(), Value::from("Resume"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(
             matches!(any, AgentEventAny::SessionInit(ref e) if e.session_id == "s1" && matches!(e.init_type, SessionInitType::Resume))
@@ -662,7 +813,11 @@ mod tests {
     fn try_from_jsonrpc_session_init_missing_field() {
         let rpc = JsonRpcNotification::builder()
             .method("session.init".into())
-            .add_param("session_id".into(), Value::from("s1"));
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let err = AgentEventAny::try_from(rpc).unwrap_err();
         assert!(matches!(err, AgentEventError::MissingField(_)));
     }
@@ -675,7 +830,11 @@ mod tests {
             .add_param("model".into(), Value::from("gpt-4"))
             .add_param("provider".into(), Value::from("openai"))
             .add_param("system".into(), Value::from("sys"))
-            .add_param("init_type".into(), Value::from("invalid"));
+            .add_param("init_type".into(), Value::from("invalid"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let err = AgentEventAny::try_from(rpc).unwrap_err();
         assert!(matches!(err, AgentEventError::InvalidFieldType(_)));
     }
@@ -687,7 +846,11 @@ mod tests {
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("success".into(), Value::from(true))
             .add_param("result".into(), Value::from("done"))
-            .add_param("error".into(), Value::Null);
+            .add_param("error".into(), Value::Null)
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(
             matches!(any, AgentEventAny::SessionStop(ref e) if e.success && e.result == Some("done".into()) && e.error.is_none())
@@ -700,22 +863,30 @@ mod tests {
             .method("user.prompt.submit".into())
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("turn_id".into(), Value::from("t1"))
-            .add_param("prompt".into(), Value::from("hello"));
+            .add_param("prompt".into(), Value::from("hello"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(matches!(any, AgentEventAny::UserPromptSubmit(ref e) if e.prompt == "hello"));
     }
 
     #[test]
-    fn try_from_jsonrpc_stream_delta_text_default() {
+    fn try_from_jsonrpc_stream_delta_no_default() {
         let rpc = JsonRpcNotification::builder()
             .method("stream.delta".into())
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("turn_id".into(), Value::from("t1"))
-            .add_param("delta".into(), Value::from("d"));
-        let any = AgentEventAny::try_from(rpc).unwrap();
-        assert!(
-            matches!(any, AgentEventAny::StreamDelta(ref e) if e.delta == "d" && matches!(e.delta_type, DeltaType::Text))
-        );
+            .add_param("delta".into(), Value::from("d"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
+        let any = AgentEventAny::try_from(rpc);
+        assert!(any.is_err_and(
+            |e| matches!(e, AgentEventError::MissingField(ref err) if err == "delta_type")
+        ));
     }
 
     #[test]
@@ -725,7 +896,15 @@ mod tests {
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("turn_id".into(), Value::from("t1"))
             .add_param("delta".into(), Value::from("d"))
-            .add_param("delta_type".into(), Value::from("thinking"));
+            .add_param(
+                "delta_type".into(),
+                serde_json::to_value(DeltaType::Thinking)
+                    .expect("Should be able to convert to value"),
+            )
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(
             matches!(any, AgentEventAny::StreamDelta(ref e) if matches!(e.delta_type, DeltaType::Thinking))
@@ -739,7 +918,11 @@ mod tests {
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("turn_id".into(), Value::from("t1"))
             .add_param("name".into(), Value::from("read"))
-            .add_param("input".into(), json!({"path": "/tmp"}));
+            .add_param("input".into(), json!({"path": "/tmp"}))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(matches!(any, AgentEventAny::ToolCall(ref e) if e.name == "read"));
     }
@@ -751,10 +934,11 @@ mod tests {
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("turn_id".into(), Value::from("t1"))
             .add_param("tool_call_id".into(), Value::from("tc1"))
-            .add_param(
-                "result".into(),
-                json!({"success": true, "result": "ok", "error": Value::Null}),
-            );
+            .add_param("result".into(), json!({"Ok": "ok"}))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(
             matches!(any, AgentEventAny::ToolResult(ref e) if matches!(e.result, ToolResult::Ok(ref s) if s == "ok"))
@@ -767,7 +951,11 @@ mod tests {
             .method("skill.load".into())
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("turn_id".into(), Value::from("t1"))
-            .add_param("skill_name".into(), Value::from("coding"));
+            .add_param("skill_name".into(), Value::from("coding"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(matches!(any, AgentEventAny::SkillLoad(ref e) if e.skill_name == "coding"));
     }
@@ -778,7 +966,11 @@ mod tests {
             .method("assistant.response".into())
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("turn_id".into(), Value::from("t1"))
-            .add_param("full_text".into(), Value::from("hi"));
+            .add_param("full_text".into(), Value::from("hi"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(
             matches!(any, AgentEventAny::AssistantResponse(ref e) if e.full_text == "hi" && e.tool_calls.is_none())
@@ -792,7 +984,11 @@ mod tests {
             .add_param("session_id".into(), Value::from("s1"))
             .add_param("turn_id".into(), Value::from("t1"))
             .add_param("full_text".into(), Value::from("hi"))
-            .add_param("tool_calls".into(), json!([{"call_type":"function","id":"1","function":{"name":"tool","arguments":"{}"}}]));
+            .add_param("tool_calls".into(), json!([{"call_type":"function","id":"1","function":{"name":"tool","arguments":"{}"}}]))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(matches!(any, AgentEventAny::AssistantResponse(ref e) if e.tool_calls.is_some()));
     }
@@ -801,7 +997,11 @@ mod tests {
     fn try_from_jsonrpc_unknown_method() {
         let rpc = JsonRpcNotification::builder()
             .method("unknown".into())
-            .add_param("session_id".into(), Value::from("s1"));
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let err = AgentEventAny::try_from(rpc).unwrap_err();
         assert!(matches!(err, AgentEventError::UnknownMethod(ref m) if m == "unknown"));
     }
@@ -810,7 +1010,11 @@ mod tests {
     fn try_from_jsonrpc_missing_session_id() {
         let rpc = JsonRpcNotification::builder()
             .method("session.stop".into())
-            .add_param("success".into(), Value::from(true));
+            .add_param("success".into(), Value::from(true))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
         let err = AgentEventAny::try_from(rpc).unwrap_err();
         assert!(matches!(err, AgentEventError::MissingField(ref m) if m == "session_id"));
     }

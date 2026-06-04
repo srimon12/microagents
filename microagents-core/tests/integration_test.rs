@@ -117,6 +117,7 @@ async fn test_microagent_integration() {
                 assert!(e.error.is_none());
             }
             AgentEventAny::SkillLoad(_) => has_skill = true,
+            _ => unreachable!("AgentEventAny should not reach this branch"),
         }
     }
     assert!(has_init);

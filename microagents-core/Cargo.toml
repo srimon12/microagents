@@ -21,6 +21,7 @@ microagents-storage = {path = "../microagents-storage"}
 async-stream = "0.3.6"
 uuid = { version = "1.23.1", features = ["v4"] }
 tokio = { version = "1.52.3", features = ["full"] }
+chrono = { version = "0.4.45", features = ["serde"] }
 
 [dev-dependencies]
 serial_test = "3.5.0"

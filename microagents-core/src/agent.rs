@@ -9,6 +9,7 @@ use std::{
 };
 
 use async_stream::stream;
+use chrono::Utc;
 use futures_util::StreamExt;
 use microagents_events::{
     AgentEventAny, AssistantResponseEvent, DeltaType, SessionInitEvent, SessionInitType,
@@ -456,6 +457,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                     system: self.system.clone(),
                     provider: self.provider.to_string(),
                     init_type: SessionInitType::Resume,
+                    timestamp: Utc::now(),
                 });
                 yield Ok(ev);
 
@@ -487,6 +489,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                     system: self.system.clone(),
                     provider: self.provider.to_string(),
                     init_type: SessionInitType::Start,
+                    timestamp: Utc::now(),
                 };
                 resolved_sid = sid;
                 let ev = AgentEventAny::SessionInit(sint.clone());
@@ -514,6 +517,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 session_id: resolved_sid.clone(),
                 turn_id: turn_id.clone(),
                 prompt,
+                timestamp: Utc::now(),
             });
             match self.storage.update_session(user_prompt_submit.clone()).await {
                 Ok(_) => {},
@@ -551,6 +555,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                         turn_id: turn_id.clone(),
                                         delta: c,
                                         delta_type: DeltaType::Text,
+                                        timestamp: Utc::now(),
                                     });
                                     match self.storage.update_session(ev.clone()).await {
                                         Ok(_) => {},
@@ -578,7 +583,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             }
                         },
                         Err(e) => {
-                            let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()) });
+                            let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()), timestamp: Utc::now() });
                             match self.storage.update_session(stop_ev.clone()).await {
                                 Ok(_) => {},
                                 Err(e) => {
@@ -598,12 +603,14 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                         turn_id: turn_id.clone(),
                         full_text: text.clone(),
                         tool_calls: None,
+                        timestamp: Utc::now(),
                     });
                     let stop_ev = AgentEventAny::SessionStop(SessionStopEvent {
                         session_id: resolved_sid.clone(),
                         success: true,
                         result: Some(text),
                         error: None,
+                        timestamp: Utc::now(),
                     });
                     match self.storage.update_session(ev.clone()).await {
                         Ok(_) => {},
@@ -645,12 +652,14 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                         turn_id: turn_id.clone(),
                                         name: tool_name,
                                         input: v.clone(),
+                                        timestamp: Utc::now(),
                                     })
                                 } else {
                                     AgentEventAny::SkillLoad(SkillLoadEvent {
                                         session_id: resolved_sid.clone(),
                                         turn_id: turn_id.clone(),
                                         skill_name: v["skill_name"].as_str().unwrap_or_default().to_string(),
+                                        timestamp: Utc::now(),
                                     })
                                 };
                                 match self.storage.update_session(tc_ev.clone()).await {
@@ -696,6 +705,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                 turn_id: turn_id.clone(),
                                 result: tool_result.clone(),
                                 tool_call_id: tid.clone(),
+                                timestamp: Utc::now(),
                             });
                             match self.storage.update_session(ev.clone()).await {
                                 Ok(_) => {},
@@ -711,7 +721,8 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                 },
                                 ToolResult::Err(r) => {
                                     format!("Tool failed: {r}")
-                                }
+                                },
+                                _ => unreachable!("ToolResult should not reach this branch")
                             };
                             tool_messages.push(Message { role: Role::Tool, content, name: None, tool_calls: None, tool_call_id: Some(tid) });
                         }
@@ -809,6 +820,7 @@ mod tests {
                     session_id: session_id.unwrap_or_else(|| "new".into()),
                     turn_id: "t1".into(),
                     prompt,
+                    timestamp: Utc::now(),
                 }));
             };
             Ok(Box::pin(s))

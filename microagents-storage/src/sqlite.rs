@@ -26,11 +26,10 @@ pub struct SqliteAgentStorage {
 impl SqliteAgentStorage {
     pub async fn new(db_path: Option<String>) -> anyhow::Result<Self> {
         let path = db_path.unwrap_or(sqlite_session_storage().to_string_lossy().to_string());
-        if let Some(parent) = std::path::Path::new(&path).parent() {
-            if !parent.exists() {
+        if let Some(parent) = std::path::Path::new(&path).parent()
+            && !parent.exists() {
                 std::fs::create_dir_all(parent)?;
             }
-        }
         let connection = Connection::open(path).await?;
         let storage = Self { connection };
         storage.ensure_table_and_idx().await?;
@@ -131,6 +130,7 @@ fn now_millis() -> anyhow::Result<i64> {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use microagents_events::{AssistantResponseEvent, SessionStopEvent, UserPromptSubmitEvent};
 
     use super::*;
@@ -156,6 +156,7 @@ mod tests {
             provider: "openai".into(),
             system: "you are a helpful assistant".into(),
             init_type: microagents_events::SessionInitType::Start,
+            timestamp: Utc::now(),
         })
         .await
         .expect("Should be able to create a session");
@@ -205,6 +206,7 @@ mod tests {
             provider: "openai".into(),
             system: "you are a helpful assistant".into(),
             init_type: microagents_events::SessionInitType::Start,
+            timestamp: Utc::now(),
         })
         .await
         .expect("Should be able to create a session");
@@ -212,6 +214,7 @@ mod tests {
             prompt: "hello".to_string(),
             session_id: "1".to_string(),
             turn_id: "t1".to_string(),
+            timestamp: Utc::now(),
         }))
         .await
         .expect("Should be able to update memory");
@@ -220,6 +223,7 @@ mod tests {
             turn_id: "t1".to_string(),
             full_text: "hello".to_string(),
             tool_calls: None,
+            timestamp: Utc::now(),
         }))
         .await
         .expect("Should be able to update memory");
@@ -228,6 +232,7 @@ mod tests {
             result: Some("hello".to_string()),
             error: None,
             success: true,
+            timestamp: Utc::now(),
         }))
         .await
         .expect("Should be able to update memory");
