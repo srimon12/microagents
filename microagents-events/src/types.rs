@@ -1,34 +1,25 @@
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
+use thiserror::Error;
 
 const JSONRPC: &str = "2.0";
 
 /// Errors that can occur when parsing a [`JsonRpcNotification`] into an [`AgentEventAny`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
+#[non_exhaustive]
 pub enum AgentEventError {
     /// A required field was missing from the JSON-RPC params.
+    #[error("Missing required field: {0}")]
     MissingField(String),
     /// A field had an unexpected type.
+    #[error("Invalid type for field: {0}")]
     InvalidFieldType(String),
     /// The JSON-RPC method name is not recognized.
+    #[error("Unknown method: {0}")]
     UnknownMethod(String),
 }
-
-impl std::fmt::Display for AgentEventError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AgentEventError::MissingField(field) => write!(f, "Missing required field: {}", field),
-            AgentEventError::InvalidFieldType(field) => {
-                write!(f, "Invalid type for field: {}", field)
-            }
-            AgentEventError::UnknownMethod(method) => write!(f, "Unknown method: {}", method),
-        }
-    }
-}
-
-impl std::error::Error for AgentEventError {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
@@ -43,57 +34,14 @@ pub struct FunctionCall {
     pub arguments: String,
 }
 
-impl From<ToolCall> for Value {
-    fn from(value: ToolCall) -> Self {
-        let tc = serde_json::to_string(&value).expect("Should be serializable");
-        let v: Value = serde_json::from_str(&tc).expect("Should deserialize to a generic value");
-        v
-    }
-}
-
-impl TryFrom<Value> for ToolCall {
-    type Error = AgentEventError;
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        let v = serde_json::to_string(&value).map_err(|e| {
-            AgentEventError::InvalidFieldType(format!(
-                "Value for a tool call should be serializable, got: {}",
-                e
-            ))
-        })?;
-        let tc: ToolCall = serde_json::from_str(&v).map_err(|e| {
-            AgentEventError::InvalidFieldType(format!(
-                "Value for a tool call should deserialize in a ToolCall, got: {}",
-                e
-            ))
-        })?;
-        Ok(tc)
-    }
-}
-
 /// Result of a tool execution, either success with output or failure with an error message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ToolResult {
     /// Tool executed successfully.
     Ok(String),
     /// Tool execution failed.
     Err(String),
-}
-
-impl From<ToolResult> for Value {
-    fn from(value: ToolResult) -> Self {
-        match value {
-            ToolResult::Ok(result) => json!({
-                "success": true,
-                "result": result,
-                "error": Value::Null,
-            }),
-            ToolResult::Err(error) => json!({
-                "success": false,
-                "result": Value::Null,
-                "error": error,
-            }),
-        }
-    }
 }
 
 /// A JSON-RPC 2.0 notification message.
@@ -127,13 +75,15 @@ impl JsonRpcNotification {
 /// Trait for events that can be converted to JSON-RPC notifications and carry a session ID.
 pub trait AgentEvent: Debug + Send + Sync {
     /// Convert this event into a [`JsonRpcNotification`].
-    fn to_jsonrpc(self) -> JsonRpcNotification;
+    fn to_jsonrpc(&self) -> JsonRpcNotification;
     /// Return the session ID associated with this event.
-    fn session_id(self) -> String;
+    fn session_id(&self) -> String;
 }
 
 #[cfg(test)]
 mod tests {
+
+    use serde_json::{Error, json};
 
     use super::*;
 
@@ -147,7 +97,7 @@ mod tests {
                 arguments: "{}".into(),
             },
         };
-        let val = Value::from(tc);
+        let val = serde_json::to_value(&tc).expect("Should be able to convert to Value");
         if let Some(v) = val.as_object() {
             assert_eq!(v.get("call_type"), Some(Value::from("function")).as_ref());
             assert_eq!(v.get("id"), Some(Value::from("1")).as_ref());
@@ -165,8 +115,8 @@ mod tests {
                 "arguments": "{}"
             }
         });
-        let tc =
-            ToolCall::try_from(value).expect("Value should be correctly converted to tool call");
+        let tc: ToolCall = serde_json::from_value(value)
+            .expect("Value should be correctly converted to tool call");
         assert_eq!(tc.call_type, "function".to_string());
         assert_eq!(tc.id, "1".to_string());
         assert_eq!(tc.function.name, "tool".to_string());
@@ -183,7 +133,7 @@ mod tests {
                 "arguments": "{}"
             }
         });
-        let result = ToolCall::try_from(value);
+        let result: Result<ToolCall, Error> = serde_json::from_value(value);
         assert!(result.is_err());
     }
 
@@ -191,22 +141,18 @@ mod tests {
     fn test_value_from_tool_result() {
         let trs = ToolResult::Ok("success!".to_string());
         let trf = ToolResult::Err("error!".to_string());
-        let value_s = Value::from(trs);
-        let value_f = Value::from(trf);
+        let value_s = serde_json::to_value(trs).expect("Should be able to convert to value");
+        let value_f = serde_json::to_value(trf).expect("Should be able to convert to value");
         assert_eq!(
             value_s,
             json!({
-                "success": true,
-                "result": "success!",
-                "error": &Value::Null,
+                "Ok": "success!",
             })
         );
         assert_eq!(
             value_f,
             json!({
-                "success": false,
-                "result": &Value::Null,
-                "error": "error!"
+                "Err": "error!",
             })
         );
     }

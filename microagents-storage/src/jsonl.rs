@@ -1,17 +1,15 @@
 use microagents_events::types::{AgentEvent, JsonRpcNotification};
 use microagents_events::{AgentEventAny, SessionInitEvent};
-use std::io::Read;
-use std::{
-    fs::{self, OpenOptions},
-    io::Write,
-    path::PathBuf,
-    sync::OnceLock,
-};
+use std::{path::PathBuf, sync::OnceLock};
+use tokio::fs::OpenOptions;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::types::AgentStorage;
 
+/// Global default directory for JSONL session files.
 pub static JSONL_SESSION_STORAGE: OnceLock<PathBuf> = OnceLock::new();
 
+/// Return the default JSONL storage directory (`~/.microagents/sessions`).
 pub fn jsonl_session_storage() -> &'static PathBuf {
     JSONL_SESSION_STORAGE.get_or_init(|| {
         dirs::home_dir()
@@ -21,8 +19,12 @@ pub fn jsonl_session_storage() -> &'static PathBuf {
     })
 }
 
+/// JSON Lines file-based implementation of [`AgentStorage`].
+///
+/// Each session is stored as a separate `.jsonl` file under `jsonl_path`.
 #[derive(Debug)]
 pub struct JsonlAgentStorage {
+    /// Directory where session `.jsonl` files are written.
     pub jsonl_path: PathBuf,
 }
 
@@ -35,17 +37,20 @@ impl Default for JsonlAgentStorage {
 }
 
 impl JsonlAgentStorage {
+    /// Create a new [`JsonlAgentStorage`].
+    ///
+    /// If `jsonl_path` is `None`, the default directory from [`jsonl_session_storage`] is used.
     pub fn new(jsonl_path: Option<PathBuf>) -> Self {
         Self {
             jsonl_path: jsonl_path.unwrap_or(jsonl_session_storage().to_owned()),
         }
     }
 
-    fn ensure_sessions_dir(&self) -> anyhow::Result<()> {
-        if self.jsonl_path.exists() {
+    async fn ensure_sessions_dir(&self) -> anyhow::Result<()> {
+        if self.jsonl_path.is_dir() {
             return Ok(());
         }
-        fs::create_dir_all(&self.jsonl_path)?;
+        tokio::fs::create_dir_all(&self.jsonl_path).await?;
         Ok(())
     }
 }
@@ -53,39 +58,58 @@ impl JsonlAgentStorage {
 #[async_trait::async_trait]
 impl AgentStorage for JsonlAgentStorage {
     async fn create_session(&self, event: SessionInitEvent) -> anyhow::Result<()> {
-        self.ensure_sessions_dir()?;
+        self.ensure_sessions_dir().await?;
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(self.jsonl_path.join(format!("{}.jsonl", event.session_id)))?;
+            .open(self.jsonl_path.join(format!("{}.jsonl", event.session_id)))
+            .await?;
         let event_json = serde_json::to_string(&event.to_jsonrpc())?;
-        writeln!(file, "{}", event_json)?;
+        file.write_all(format!("{}\n", event_json).as_bytes())
+            .await?;
         Ok(())
     }
 
     async fn update_session(&self, event: AgentEventAny) -> anyhow::Result<()> {
-        self.ensure_sessions_dir()?;
-        let mut file = OpenOptions::new().create(true).append(true).open(
-            self.jsonl_path
-                .join(format!("{}.jsonl", event.clone().session_id())),
-        )?;
-        writeln!(file, "{}", serde_json::to_string(&event.to_jsonrpc())?)?;
+        self.ensure_sessions_dir().await?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(
+                self.jsonl_path
+                    .join(format!("{}.jsonl", event.session_id())),
+            )
+            .await?;
+        file.write_all(format!("{}\n", serde_json::to_string(&event.to_jsonrpc())?).as_bytes())
+            .await?;
         Ok(())
     }
 
     async fn get_session(&self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
-        self.ensure_sessions_dir()?;
+        self.ensure_sessions_dir().await?;
         let mut file = OpenOptions::new()
             .read(true)
-            .open(self.jsonl_path.join(format!("{session_id}.jsonl")))?;
+            .open(self.jsonl_path.join(format!("{session_id}.jsonl")))
+            .await?;
         let mut buf = String::new();
-        file.read_to_string(&mut buf)?;
+        file.read_to_string(&mut buf).await?;
         let mut events = vec![];
+        let mut i = 0;
         for line in buf.lines() {
-            let jsrpc: JsonRpcNotification = serde_json::from_str(line)?;
+            i += 1;
+            let jsrpc: JsonRpcNotification = match serde_json::from_str(line.trim_end_matches("\n"))
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Corrupted line {:?}. Error detail: {}", i, e);
+                    continue;
+                }
+            };
             let event = AgentEventAny::try_from(jsrpc)?;
             events.push(event);
         }
+
+        events.sort_by_key(|a| a.timestamp());
 
         Ok(events)
     }
@@ -93,6 +117,7 @@ impl AgentStorage for JsonlAgentStorage {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use microagents_events::{AssistantResponseEvent, SessionStopEvent, UserPromptSubmitEvent};
 
     use super::*;
@@ -114,11 +139,13 @@ mod tests {
                 provider: "openai".into(),
                 system: "you are a helpful assistant".into(),
                 init_type: microagents_events::SessionInitType::Start,
+                timestamp: Utc::now(),
             })
             .await
             .expect("Should be able to create a session");
-        let content =
-            fs::read_to_string(tmp.path().join("1.jsonl")).expect("Should be able to read file");
+        let content = tokio::fs::read_to_string(tmp.path().join("1.jsonl"))
+            .await
+            .expect("Should be able to read file");
         let mut events = vec![];
         for line in content.lines() {
             let jsrpc: JsonRpcNotification =
@@ -144,6 +171,7 @@ mod tests {
                 provider: "openai".into(),
                 system: "you are a helpful assistant".into(),
                 init_type: microagents_events::SessionInitType::Start,
+                timestamp: Utc::now(),
             })
             .await
             .expect("Should be able to create a session");
@@ -152,6 +180,7 @@ mod tests {
                 prompt: "hello".to_string(),
                 session_id: "1".to_string(),
                 turn_id: "t1".to_string(),
+                timestamp: Utc::now(),
             }))
             .await
             .expect("Should be able to update memory");
@@ -161,6 +190,7 @@ mod tests {
                 turn_id: "t1".to_string(),
                 full_text: "hello".to_string(),
                 tool_calls: None,
+                timestamp: Utc::now(),
             }))
             .await
             .expect("Should be able to update memory");
@@ -170,6 +200,7 @@ mod tests {
                 result: Some("hello".to_string()),
                 error: None,
                 success: true,
+                timestamp: Utc::now(),
             }))
             .await
             .expect("Should be able to update memory");
@@ -178,21 +209,15 @@ mod tests {
             .await
             .expect("Should be able to get the session");
         assert_eq!(events.len(), 4);
+        assert_eq!(events[0].to_jsonrpc().method, "session.init".to_string());
         assert_eq!(
-            events[0].clone().to_jsonrpc().method,
-            "session.init".to_string()
-        );
-        assert_eq!(
-            events[1].clone().to_jsonrpc().method,
+            events[1].to_jsonrpc().method,
             "user.prompt.submit".to_string()
         );
         assert_eq!(
-            events[2].clone().to_jsonrpc().method,
+            events[2].to_jsonrpc().method,
             "assistant.response".to_string()
         );
-        assert_eq!(
-            events[3].clone().to_jsonrpc().method,
-            "session.stop".to_string()
-        );
+        assert_eq!(events[3].to_jsonrpc().method, "session.stop".to_string());
     }
 }
