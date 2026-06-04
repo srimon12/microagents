@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    vec,
 };
 
 use microagents_events::{AgentEventAny, SessionInitEvent, types::AgentEvent};
@@ -36,12 +35,12 @@ impl AgentStorage for InMemoryAgentStorage {
     }
 
     async fn update_session(&self, event: AgentEventAny) -> anyhow::Result<()> {
-        let session_id = event.clone().session_id();
+        let session_id = &event.session_id();
         let mut sessions = self
             .sessions
             .write()
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let session = sessions.get_mut(&session_id);
+        let session = sessions.get_mut(session_id);
         if let Some(s) = session {
             s.push(event);
             return Ok(());
@@ -156,21 +155,15 @@ mod tests {
             .await
             .expect("Should be able to get the session");
         assert_eq!(events.len(), 4);
+        assert_eq!(events[0].to_jsonrpc().method, "session.init".to_string());
         assert_eq!(
-            events[0].clone().to_jsonrpc().method,
-            "session.init".to_string()
-        );
-        assert_eq!(
-            events[1].clone().to_jsonrpc().method,
+            events[1].to_jsonrpc().method,
             "user.prompt.submit".to_string()
         );
         assert_eq!(
-            events[2].clone().to_jsonrpc().method,
+            events[2].to_jsonrpc().method,
             "assistant.response".to_string()
         );
-        assert_eq!(
-            events[3].clone().to_jsonrpc().method,
-            "session.stop".to_string()
-        );
+        assert_eq!(events[3].to_jsonrpc().method, "session.stop".to_string());
     }
 }

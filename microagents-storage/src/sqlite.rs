@@ -24,12 +24,13 @@ pub struct SqliteAgentStorage {
 }
 
 impl SqliteAgentStorage {
-    pub async fn new(db_path: Option<String>) -> anyhow::Result<Self> {
-        let path = db_path.unwrap_or(sqlite_session_storage().to_string_lossy().to_string());
+    pub async fn new(db_path: Option<&str>) -> anyhow::Result<Self> {
+        let path = db_path.unwrap_or(sqlite_session_storage().to_str().unwrap());
         if let Some(parent) = std::path::Path::new(&path).parent()
-            && !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
+        }
         let connection = Connection::open(path).await?;
         let storage = Self { connection };
         storage.ensure_table_and_idx().await?;
@@ -77,7 +78,7 @@ impl AgentStorage for SqliteAgentStorage {
     }
 
     async fn update_session(&self, event: AgentEventAny) -> anyhow::Result<()> {
-        let session_id = event.clone().session_id();
+        let session_id = event.session_id();
         let json_event = serde_json::to_string(&event.to_jsonrpc())?;
         let now = now_millis()?;
 
@@ -125,7 +126,8 @@ impl AgentStorage for SqliteAgentStorage {
 fn now_millis() -> anyhow::Result<i64> {
     Ok(SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)?
-        .as_millis() as i64)
+        .as_millis()
+        .try_into()?)
 }
 
 #[cfg(test)]
@@ -139,7 +141,7 @@ mod tests {
     async fn test_default_init() {
         let tmp = tempfile::tempdir().unwrap();
         let db_path = tmp.path().join("sessions.db");
-        let result = SqliteAgentStorage::new(Some(db_path.to_string_lossy().to_string())).await;
+        let result = SqliteAgentStorage::new(db_path.to_str()).await;
         assert!(result.is_ok());
     }
 
@@ -147,7 +149,7 @@ mod tests {
     async fn test_create_session() {
         let tmp = tempfile::tempdir().unwrap();
         let db_path = tmp.path().join("test.db");
-        let sql = SqliteAgentStorage::new(Some(db_path.to_string_lossy().to_string()))
+        let sql = SqliteAgentStorage::new(db_path.to_str())
             .await
             .expect("Should be able to open agent store");
         sql.create_session(SessionInitEvent {
@@ -197,7 +199,7 @@ mod tests {
     async fn test_create_update_get_session() {
         let tmp = tempfile::tempdir().unwrap();
         let db_path = tmp.path().join("test.db");
-        let sql = SqliteAgentStorage::new(Some(db_path.to_string_lossy().to_string()))
+        let sql = SqliteAgentStorage::new(db_path.to_str())
             .await
             .expect("Should be able to create sqlite store");
         sql.create_session(SessionInitEvent {
@@ -241,22 +243,16 @@ mod tests {
             .await
             .expect("Should be able to get the session");
         assert_eq!(events.len(), 4);
+        assert_eq!(events[0].to_jsonrpc().method, "session.init".to_string());
         assert_eq!(
-            events[0].clone().to_jsonrpc().method,
-            "session.init".to_string()
-        );
-        assert_eq!(
-            events[1].clone().to_jsonrpc().method,
+            events[1].to_jsonrpc().method,
             "user.prompt.submit".to_string()
         );
         assert_eq!(
-            events[2].clone().to_jsonrpc().method,
+            events[2].to_jsonrpc().method,
             "assistant.response".to_string()
         );
-        assert_eq!(
-            events[3].clone().to_jsonrpc().method,
-            "session.stop".to_string()
-        );
+        assert_eq!(events[3].to_jsonrpc().method, "session.stop".to_string());
         // Connection is dropped when `sql` goes out of scope, then tmp dir is cleaned up
     }
 }

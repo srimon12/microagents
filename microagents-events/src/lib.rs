@@ -154,16 +154,16 @@ pub struct AssistantResponseEvent {
 }
 
 impl AgentEvent for SessionInitEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
             .method("session.init".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
-            .add_param("system".into(), Value::from(self.system))
-            .add_param("model".into(), Value::from(self.model))
-            .add_param("provider".into(), Value::from(self.provider))
+            .add_param("system".into(), Value::from(self.system.clone()))
+            .add_param("model".into(), Value::from(self.model.clone()))
+            .add_param("provider".into(), Value::from(self.provider.clone()))
             .add_param(
                 "init_type".into(),
-                serde_json::to_value(self.init_type).unwrap(),
+                serde_json::to_value(self.init_type.clone()).unwrap(),
             )
             .add_param(
                 "timestamp".into(),
@@ -171,58 +171,58 @@ impl AgentEvent for SessionInitEvent {
             )
     }
 
-    fn session_id(self) -> String {
-        self.session_id
+    fn session_id(&self) -> String {
+        self.session_id.clone()
     }
 }
 
 impl AgentEvent for SessionStopEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
             .method("session.stop".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
             .add_param("success".into(), Value::from(self.success))
-            .add_param("result".into(), Value::from(self.result))
-            .add_param("error".into(), Value::from(self.error))
+            .add_param("result".into(), Value::from(self.result.clone()))
+            .add_param("error".into(), Value::from(self.error.clone()))
             .add_param(
                 "timestamp".into(),
                 serde_json::to_value(self.timestamp).unwrap(),
             )
     }
 
-    fn session_id(self) -> String {
-        self.session_id
+    fn session_id(&self) -> String {
+        self.session_id.clone()
     }
 }
 
 impl AgentEvent for UserPromptSubmitEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
             .method("user.prompt.submit".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
-            .add_param("turn_id".into(), Value::from(self.turn_id))
-            .add_param("prompt".into(), Value::from(self.prompt))
+            .add_param("turn_id".into(), Value::from(self.turn_id.clone()))
+            .add_param("prompt".into(), Value::from(self.prompt.clone()))
             .add_param(
                 "timestamp".into(),
                 serde_json::to_value(self.timestamp).unwrap(),
             )
     }
 
-    fn session_id(self) -> String {
-        self.session_id
+    fn session_id(&self) -> String {
+        self.session_id.clone()
     }
 }
 
 impl AgentEvent for StreamDeltaEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
             .method("stream.delta".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
-            .add_param("turn_id".into(), Value::from(self.turn_id))
-            .add_param("delta".into(), Value::from(self.delta))
+            .add_param("turn_id".into(), Value::from(self.turn_id.clone()))
+            .add_param("delta".into(), Value::from(self.delta.clone()))
             .add_param(
                 "delta_type".into(),
-                serde_json::to_value(self.delta_type).unwrap(),
+                serde_json::to_value(self.delta_type.clone()).unwrap(),
             )
             .add_param(
                 "timestamp".into(),
@@ -230,77 +230,80 @@ impl AgentEvent for StreamDeltaEvent {
             )
     }
 
-    fn session_id(self) -> String {
-        self.session_id
+    fn session_id(&self) -> String {
+        self.session_id.clone()
     }
 }
 
 impl AgentEvent for ToolCallEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
             .method("tool.call".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
-            .add_param("turn_id".into(), Value::from(self.turn_id))
-            .add_param("name".into(), Value::from(self.name))
-            .add_param("input".into(), self.input)
+            .add_param("turn_id".into(), Value::from(self.turn_id.clone()))
+            .add_param("name".into(), Value::from(self.name.clone()))
+            .add_param("input".into(), self.input.clone())
             .add_param(
                 "timestamp".into(),
                 serde_json::to_value(self.timestamp).unwrap(),
             )
     }
 
-    fn session_id(self) -> String {
-        self.session_id
+    fn session_id(&self) -> String {
+        self.session_id.clone()
     }
 }
 
 impl AgentEvent for ToolResultEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
             .method("tool.result".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
-            .add_param("turn_id".into(), Value::from(self.turn_id))
+            .add_param("turn_id".into(), Value::from(self.turn_id.clone()))
             .add_param("result".into(), serde_json::to_value(&self.result).unwrap())
-            .add_param("tool_call_id".into(), Value::from(self.tool_call_id))
+            .add_param(
+                "tool_call_id".into(),
+                Value::from(self.tool_call_id.clone()),
+            )
             .add_param(
                 "timestamp".into(),
                 serde_json::to_value(self.timestamp).unwrap(),
             )
     }
 
-    fn session_id(self) -> String {
-        self.session_id
+    fn session_id(&self) -> String {
+        self.session_id.clone()
     }
 }
 
 impl AgentEvent for SkillLoadEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
             .method("skill.load".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
-            .add_param("turn_id".into(), Value::from(self.turn_id))
-            .add_param("skill_name".into(), Value::from(self.skill_name))
+            .add_param("turn_id".into(), Value::from(self.turn_id.clone()))
+            .add_param("skill_name".into(), Value::from(self.skill_name.clone()))
             .add_param(
                 "timestamp".into(),
                 serde_json::to_value(self.timestamp).unwrap(),
             )
     }
 
-    fn session_id(self) -> String {
-        self.session_id
+    fn session_id(&self) -> String {
+        self.session_id.clone()
     }
 }
 
 impl AgentEvent for AssistantResponseEvent {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
             .method("assistant.response".into())
             .add_param("session_id".into(), Value::from(self.session_id.clone()))
-            .add_param("turn_id".into(), Value::from(self.turn_id))
-            .add_param("full_text".into(), Value::from(self.full_text))
+            .add_param("turn_id".into(), Value::from(self.turn_id.clone()))
+            .add_param("full_text".into(), Value::from(self.full_text.clone()))
             .add_param(
                 "tool_calls".into(),
-                Value::from(self.tool_calls.map(|tcs| {
+                Value::from(self.tool_calls.clone().map(|tcs| {
                     tcs.iter()
                         .map(|tc| serde_json::to_value(tc).unwrap())
                         .collect::<Vec<Value>>()
@@ -312,8 +315,8 @@ impl AgentEvent for AssistantResponseEvent {
             )
     }
 
-    fn session_id(self) -> String {
-        self.session_id
+    fn session_id(&self) -> String {
+        self.session_id.clone()
     }
 }
 
@@ -332,7 +335,7 @@ pub enum AgentEventAny {
 }
 
 impl AgentEvent for AgentEventAny {
-    fn to_jsonrpc(self) -> JsonRpcNotification {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
         match self {
             Self::SessionInit(s) => s.to_jsonrpc(),
             Self::AssistantResponse(s) => s.to_jsonrpc(),
@@ -345,16 +348,16 @@ impl AgentEvent for AgentEventAny {
         }
     }
 
-    fn session_id(self) -> String {
+    fn session_id(&self) -> String {
         match self {
-            Self::AssistantResponse(s) => s.session_id,
-            Self::SessionInit(s) => s.session_id,
-            Self::SessionStop(s) => s.session_id,
-            Self::StreamDelta(s) => s.session_id,
-            Self::SkillLoad(s) => s.session_id,
-            Self::ToolCall(s) => s.session_id,
-            Self::ToolResult(s) => s.session_id,
-            Self::UserPromptSubmit(s) => s.session_id,
+            Self::AssistantResponse(s) => s.session_id.clone(),
+            Self::SessionInit(s) => s.session_id.clone(),
+            Self::SessionStop(s) => s.session_id.clone(),
+            Self::StreamDelta(s) => s.session_id.clone(),
+            Self::SkillLoad(s) => s.session_id.clone(),
+            Self::ToolCall(s) => s.session_id.clone(),
+            Self::ToolResult(s) => s.session_id.clone(),
+            Self::UserPromptSubmit(s) => s.session_id.clone(),
         }
     }
 }

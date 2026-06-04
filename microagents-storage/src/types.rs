@@ -9,6 +9,7 @@ pub trait AgentStorage: Send + Debug + Sync {
     async fn get_session(&self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum AgentStorageChoice {
     Memory,
     Jsonl,

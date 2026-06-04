@@ -67,7 +67,7 @@ impl AgentStorage for JsonlAgentStorage {
         self.ensure_sessions_dir()?;
         let mut file = OpenOptions::new().create(true).append(true).open(
             self.jsonl_path
-                .join(format!("{}.jsonl", event.clone().session_id())),
+                .join(format!("{}.jsonl", &event.session_id())),
         )?;
         writeln!(file, "{}", serde_json::to_string(&event.to_jsonrpc())?)?;
         Ok(())
@@ -184,21 +184,15 @@ mod tests {
             .await
             .expect("Should be able to get the session");
         assert_eq!(events.len(), 4);
+        assert_eq!(events[0].to_jsonrpc().method, "session.init".to_string());
         assert_eq!(
-            events[0].clone().to_jsonrpc().method,
-            "session.init".to_string()
-        );
-        assert_eq!(
-            events[1].clone().to_jsonrpc().method,
+            events[1].to_jsonrpc().method,
             "user.prompt.submit".to_string()
         );
         assert_eq!(
-            events[2].clone().to_jsonrpc().method,
+            events[2].to_jsonrpc().method,
             "assistant.response".to_string()
         );
-        assert_eq!(
-            events[3].clone().to_jsonrpc().method,
-            "session.stop".to_string()
-        );
+        assert_eq!(events[3].to_jsonrpc().method, "session.stop".to_string());
     }
 }

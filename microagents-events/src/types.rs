@@ -75,9 +75,9 @@ impl JsonRpcNotification {
 /// Trait for events that can be converted to JSON-RPC notifications and carry a session ID.
 pub trait AgentEvent: Debug + Send + Sync {
     /// Convert this event into a [`JsonRpcNotification`].
-    fn to_jsonrpc(self) -> JsonRpcNotification;
+    fn to_jsonrpc(&self) -> JsonRpcNotification;
     /// Return the session ID associated with this event.
-    fn session_id(self) -> String;
+    fn session_id(&self) -> String;
 }
 
 #[cfg(test)]
