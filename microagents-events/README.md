@@ -23,6 +23,7 @@ This crate defines the core event types that flow through an agent session: init
 
 ```rust
 use microagents_events::*;
+use chrono::Utc;
 
 let event = SessionInitEvent {
     session_id: "sess-1".into(),
@@ -30,6 +31,7 @@ let event = SessionInitEvent {
     provider: "openai".into(),
     system: "You are a helpful assistant.".into(),
     init_type: SessionInitType::Start,
+    timestamp: Utc::now(),
 };
 
 let rpc = event.to_jsonrpc();
@@ -40,11 +42,14 @@ let rpc = event.to_jsonrpc();
 ## Round-trip
 
 ```rust
+use chrono::Utc;
+
 let rpc = JsonRpcNotification::builder()
     .method("user.prompt.submit".into())
     .add_param("session_id".into(), "s1".into())
     .add_param("turn_id".into(), "t1".into())
-    .add_param("prompt".into(), "Hello!".into());
+    .add_param("prompt".into(), "Hello!".into())
+    .add_param("timestamp", serde_json::to_value(Utc::now()).unwrap());
 
 let any = AgentEventAny::try_from(rpc)?;
 ```
