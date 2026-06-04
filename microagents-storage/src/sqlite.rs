@@ -55,15 +55,28 @@ impl SqliteAgentStorage {
             .call(|conn| -> Result<(), tokio_rusqlite::rusqlite::Error> {
                 conn.execute_batch(
                     r#"
-                CREATE TABLE IF NOT EXISTS events (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id  TEXT    NOT NULL,
-                    payload     TEXT    NOT NULL,
-                    created_at  INTEGER NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id);
-            "#,
+                    PRAGMA journal_mode = WAL;
+                    PRAGMA synchronous = NORMAL;
+                    "#,
                 )?;
+
+                // useful for future migrations
+                let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+
+                if version < 1 {
+                    conn.execute_batch(
+                        r#"
+                    CREATE TABLE IF NOT EXISTS events (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id  TEXT    NOT NULL,
+                        payload     TEXT    NOT NULL,
+                        created_at  INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id);
+                    PRAGMA user_version = 1;
+                    "#,
+                    )?;
+                }
                 Ok(())
             })
             .await?;

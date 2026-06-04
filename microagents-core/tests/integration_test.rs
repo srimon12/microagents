@@ -68,7 +68,8 @@ async fn test_microagent_integration() {
         .custom_instructions("Always call the weather_tool when asked about the weather".into())
         .add_tool(Arc::new(WeatherTool))
         .expect("Should be able to register tool")
-        .build();
+        .build()
+        .expect("Should be able to build the agent");
     let mut events = vec![];
     let mut stream = agent
         .run("What is the weather in San Francisco?".into(), None)

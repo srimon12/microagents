@@ -9,8 +9,13 @@ use ultrafast_models_sdk::{
 
 use crate::types::{AgentError, ToolExecutionContext, ToolFunction};
 
+pub fn check_api_key(api_key: &str) -> Result<(), std::env::VarError> {
+    let _ = std::env::var(api_key)?;
+    Ok(())
+}
+
 pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
-    let message: Option<Message> = match event {
+    match event {
         AgentEventAny::UserPromptSubmit(p) => Some(Message {
             role: Role::User,
             content: p.prompt,
@@ -64,9 +69,7 @@ pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
             })
         }
         _ => None,
-    };
-
-    message
+    }
 }
 
 pub enum JsonResult {
@@ -75,7 +78,7 @@ pub enum JsonResult {
     Malformed,
 }
 
-pub fn is_valid_json(s: &str) -> JsonResult {
+pub fn parse_json_fragment(s: &str) -> JsonResult {
     let v = serde_json::from_str::<Value>(s);
     match v {
         Ok(val) => JsonResult::Valid(val),
@@ -253,24 +256,24 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_json_valid() {
-        match is_valid_json(r#"{"key": "value"}"#) {
+    fn test_parse_json_fragment_valid() {
+        match parse_json_fragment(r#"{"key": "value"}"#) {
             JsonResult::Valid(v) => assert_eq!(v["key"], "value"),
             _ => panic!("expected Valid"),
         }
     }
 
     #[test]
-    fn test_is_valid_json_incomplete() {
-        match is_valid_json(r#"{"key": "val""#) {
+    fn test_parse_json_fragment_incomplete() {
+        match parse_json_fragment(r#"{"key": "val""#) {
             JsonResult::Incomplete => {}
             _ => panic!("expected Incomplete"),
         }
     }
 
     #[test]
-    fn test_is_valid_json_malformed() {
-        match is_valid_json(r#"{"key": "value",}"#) {
+    fn test_parse_json_fragment_malformed() {
+        match parse_json_fragment(r#"{"key": "value",}"#) {
             JsonResult::Malformed => {}
             _ => panic!("expected Malformed"),
         }

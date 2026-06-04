@@ -117,7 +117,9 @@ async fn build_agent(
         }
         builder
     };
-    Ok(base_builder.build())
+    base_builder
+        .build()
+        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))
 }
 
 #[tokio::main]

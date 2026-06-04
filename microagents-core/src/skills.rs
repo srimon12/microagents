@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::{collections::HashMap, fs, io};
 use thiserror::Error;
@@ -68,7 +69,7 @@ pub enum SkillLoadingError {
     SkillFrontMatterError(#[from] markdown_frontmatter::Error),
 }
 
-pub fn parse_skill(skill_file: &PathBuf) -> Result<String, SkillLoadingError> {
+pub fn parse_skill(skill_file: &Path) -> Result<String, SkillLoadingError> {
     let content = fs::read_to_string(skill_file)?;
     let (frontmatter, _) = markdown_frontmatter::parse::<SkillFrontmatter>(&content)?;
 
@@ -86,17 +87,17 @@ pub fn ensure_skill(skill_name: &str) -> Option<PathBuf> {
     None
 }
 
-pub fn find_skills() -> Result<Vec<(String, String)>, SkillLoadingError> {
+pub fn find_skills() -> Result<HashSet<(String, String)>, SkillLoadingError> {
     let g = global_skills_path();
     let p = PathBuf::from(SKILLS_PATH);
-    let mut all_skills = vec![];
+    let mut all_skills = HashSet::new();
     if g.exists() {
         let result = fs::read_dir(g)?;
         for entry in result {
             let entry = entry?;
             if entry.path().is_dir() {
                 let des = parse_skill(&entry.path().join("SKILL.md"))?;
-                all_skills.push((entry.file_name().to_str().unwrap().to_string(), des));
+                all_skills.insert((entry.file_name().to_str().unwrap().to_string(), des));
             }
         }
     }
@@ -107,7 +108,7 @@ pub fn find_skills() -> Result<Vec<(String, String)>, SkillLoadingError> {
             let entry = entry?;
             if entry.path().is_dir() {
                 let des = parse_skill(&entry.path().join("SKILL.md"))?;
-                all_skills.push((entry.file_name().to_str().unwrap().to_string(), des));
+                all_skills.insert((entry.file_name().to_str().unwrap().to_string(), des));
             }
         }
     }

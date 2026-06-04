@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     env::{self},
     fmt::{self, Debug},
     fs,
@@ -32,7 +32,7 @@ use ultrafast_models_sdk::{
 };
 
 use crate::{
-    common::{JsonResult, call_tool, convert_event_to_message, is_valid_json},
+    common::{JsonResult, call_tool, check_api_key, convert_event_to_message, parse_json_fragment},
     skills::{self, ensure_skill, find_skills, parse_skill},
     types::{Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction},
 };
@@ -60,7 +60,7 @@ To carry out a task, follow the main rules of the Zen of Python whenever possibl
 - In the face of ambiguity, refuse the temptation to guess.
 - There should be one (and preferably only one) obvious way to do it.
 - If the implementation is hard to explain, it's a bad idea.
-- If the implementation is easy to explain, it _may_ be a good idea, but **it not necessarily is**.
+- If the implementation is easy to explain, it _may_ be a good idea, but **it is not necessarily**.
 </general>
 <tools_and_skills_usage>
 Tools can be invoked by providing their name and an input conforming to their input JSON schema.
@@ -139,6 +139,8 @@ pub enum MicroAgentBuilderError {
     ToolAlreadyDefined(String),
     #[error("Storage could not be loaded: {0}")]
     StorageLoadError(String),
+    #[error("API key not found for provider {0}")]
+    APIKeyNotFoundError(String),
 }
 
 pub struct DebuggableClient(pub Arc<UltrafastClient>);
@@ -295,13 +297,35 @@ You are {} provided by {}
             }
             base += "\n</skills>";
         }
+        if !self.custom_instructions.is_empty() {
+            base += &format!(
+                "\n<additional_instructions>\n{}\n</additional_instructions>",
+                self.custom_instructions
+            )
+        }
 
         base
     }
 
-    pub fn build(self) -> MicroAgent<Ctx> {
+    pub fn build(self) -> Result<MicroAgent<Ctx>, MicroAgentBuilderError> {
         let system = self.resolve_system();
-        MicroAgent {
+        match self.provider {
+            SupportedProvider::Groq => {
+                check_api_key("GROQ_API_KEY")
+                    .map_err(|_| MicroAgentBuilderError::APIKeyNotFoundError("groq".into()))?;
+            }
+            SupportedProvider::OpenAI => {
+                check_api_key("OPENAI_API_KEY")
+                    .map_err(|_| MicroAgentBuilderError::APIKeyNotFoundError("openai".into()))?;
+            }
+            SupportedProvider::OpenRouter => {
+                check_api_key("OPENROUTER_API_KEY").map_err(|_| {
+                    MicroAgentBuilderError::APIKeyNotFoundError("openrouter".into())
+                })?;
+            }
+            _ => {}
+        }
+        Ok(MicroAgent {
             history: vec![],
             tools: self.tools,
             skills: self.skills,
@@ -312,7 +336,7 @@ You are {} provided by {}
             tool_context: self.tool_context,
             storage: self.storage,
             parallel_tool_calls: self.parallel_tool_calls,
-        }
+        })
     }
 }
 
@@ -401,7 +425,9 @@ impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
         input: Value,
         _ctx: &Arc<ToolExecutionContext<Ctx>>,
     ) -> Result<ToolResult, AgentError> {
-        let skill_name = input["skill_name"].as_str().unwrap();
+        let skill_name = input["skill_name"]
+            .as_str()
+            .ok_or_else(|| AgentError::ToolCallError("missing skill_name".into()))?;
         let skill_path = ensure_skill(skill_name);
         if let Some(p) = skill_path {
             let content = fs::read_to_string(p.join("SKILL.md")).map_err(|e| {
@@ -538,7 +564,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 };
                 let mut text = String::new();
                 let mut tool_messages: Vec<Message> = vec![];
-                let mut tool_calls: HashMap<u32, (String, String, String)> = HashMap::new();
+                let mut tool_calls: BTreeMap<u32, (String, String, String)> = BTreeMap::new();
                 while let Some(g) = generation.next().await {
                     match g {
                         Ok(chunk) => {
@@ -641,7 +667,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 };
                 let semaphore = Arc::new(Semaphore::new(concurrency));
                 for (tid, name, args) in tool_calls.values() {
-                    match is_valid_json(args) {
+                    match parse_json_fragment(args) {
                         JsonResult::Valid(v) => {
                             let tool = local_tools.get(name);
                             if let Some(t) = tool {
@@ -739,7 +765,9 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                     role: Role::Assistant,
                     content: text.clone(),
                     name: None,
-                    tool_calls: Some(tool_calls.iter().map(|(_, (tid, name, args))| ToolCall {
+                    tool_calls: Some(tool_calls.iter().
+                        filter(|(_, (tid, _, _))| !to_pop.contains(tid))
+                        .map(|(_, (tid, name, args))| ToolCall {
                         call_type: "function".into(),
                         id: tid.clone(),
                         function: FunctionCall {
@@ -951,7 +979,7 @@ mod tests {
             .await
             .unwrap();
         // We cannot directly inspect the dyn type, but building should succeed
-        let _agent = builder.build();
+        let _agent = builder.build().expect("Should be able to build the agent");
     }
 
     #[tokio::test]
@@ -960,7 +988,7 @@ mod tests {
             .storage(AgentStorageChoice::Memory)
             .await
             .unwrap();
-        let _agent = builder.build();
+        let _agent = builder.build().expect("Should be able to build the agent");
     }
 
     #[tokio::test]
@@ -969,7 +997,7 @@ mod tests {
             .storage(AgentStorageChoice::Sqlite)
             .await
             .unwrap();
-        let _agent = builder.build();
+        let _agent = builder.build().expect("Should be able to build the agent");
     }
 
     // ------------------------------------------------------------------
@@ -978,16 +1006,23 @@ mod tests {
 
     #[test]
     fn test_build_sets_empty_history() {
-        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(())).build();
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("ollama".into())
+            .unwrap()
+            .build()
+            .expect("Should be able to build the agent");
         assert!(agent.history.is_empty());
     }
 
     #[test]
     fn test_build_sets_tools_on_agent() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("ollama".into())
+            .unwrap()
             .add_tool(Arc::new(DummyTool))
             .unwrap()
-            .build();
+            .build()
+            .expect("Should be able to build the agent");
         assert_eq!(agent.tools.len(), 2);
     }
 
@@ -996,58 +1031,91 @@ mod tests {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
             .provider("ollama".into())
             .unwrap()
-            .build();
+            .build()
+            .expect("Should be able to build the agent");
         assert_eq!(agent.provider, SupportedProvider::Ollama);
     }
 
     #[test]
     fn test_build_sets_model_on_agent() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("ollama".into())
+            .unwrap()
             .model("llama3.2".into())
-            .build();
+            .build()
+            .expect("Should be able to build the agent");
         assert_eq!(agent.model, "llama3.2");
     }
 
     #[test]
     fn test_build_sets_parallel_tool_calls_on_agent() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("ollama".into())
+            .unwrap()
             .parallel_tool_calls(true)
-            .build();
+            .build()
+            .expect("Should be able to build the agent");
         assert!(agent.parallel_tool_calls);
     }
 
     #[test]
     fn test_build_system_prompt_contains_base() {
-        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(())).build();
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("ollama".into())
+            .unwrap()
+            .build()
+            .expect("Should be able to build the agent");
         assert!(agent.system.contains("You are MicroAgent"));
     }
 
     #[test]
     fn test_build_system_prompt_contains_tools() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("ollama".into())
+            .unwrap()
             .add_tool(Arc::new(DummyTool))
             .unwrap()
-            .build();
+            .build()
+            .expect("Should be able to build the agent");
         assert!(agent.system.contains("<tools>"));
         assert!(agent.system.contains("<name>dummy</name>"));
     }
 
     #[test]
     fn test_build_system_prompt_contains_default_model_when_model_empty() {
-        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(())).build();
+        let original_value = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+        unsafe {
+            std::env::set_var("OPENAI_API_KEY", "test");
+        }
+        let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .build()
+            .expect("Should be able to build the agent");
         // Default provider is OpenAI -> default model is gpt-5.5
         assert!(agent.system.contains("gpt-5.5"));
+        unsafe {
+            std::env::set_var("OPENAI_API_KEY", original_value);
+        }
     }
 
     #[test]
     fn test_build_system_prompt_contains_custom_model_when_set() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("groq".into())
+            .provider("ollama".into())
             .unwrap()
             .model("custom-model".into())
-            .build();
+            .build()
+            .expect("Should be able to build the agent");
         assert!(agent.system.contains("custom-model"));
-        assert!(!agent.system.contains("llama-3.3-70b-versatile"));
+        assert!(!agent.system.contains("llama-3.2"));
+    }
+
+    #[test]
+    fn test_agent_fails_to_build_if_not_api_key() {
+        let result = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider("groq".into())
+            .unwrap()
+            .build();
+        assert!(result.is_err_and(|e| matches!(e, MicroAgentBuilderError::APIKeyNotFoundError(_))));
     }
 
     // ------------------------------------------------------------------
