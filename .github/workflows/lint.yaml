@@ -2,10 +2,6 @@ name: Lint
 
 on:
   pull_request:
-    paths:
-      - src/*.rs
-      - Cargo.toml
-      - jakefile.toml
 env:
   CARGO_TERM_COLOR: always
 
