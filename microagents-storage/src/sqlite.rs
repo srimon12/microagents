@@ -3,7 +3,12 @@ use microagents_events::{
     AgentEventAny, SessionInitEvent,
     types::{AgentEvent, JsonRpcNotification},
 };
-use std::{path::PathBuf, sync::OnceLock, time::SystemTime};
+use std::{
+    path::PathBuf,
+    sync::{Arc, OnceLock},
+    time::SystemTime,
+};
+use tokio::sync::Mutex;
 use tokio_rusqlite::Connection;
 use tokio_rusqlite::rusqlite;
 
@@ -20,7 +25,7 @@ pub fn sqlite_session_storage() -> &'static PathBuf {
 
 #[derive(Debug, Clone)]
 pub struct SqliteAgentStorage {
-    connection: Connection,
+    connection: Arc<Mutex<Connection>>,
 }
 
 impl SqliteAgentStorage {
@@ -31,7 +36,7 @@ impl SqliteAgentStorage {
         {
             std::fs::create_dir_all(parent)?;
         }
-        let connection = Connection::open(path).await?;
+        let connection = Arc::new(Mutex::new(Connection::open(path).await?));
         let storage = Self { connection };
         storage.ensure_table_and_idx().await?;
         Ok(storage)
@@ -39,6 +44,8 @@ impl SqliteAgentStorage {
 
     async fn ensure_table_and_idx(&self) -> anyhow::Result<()> {
         self.connection
+            .lock()
+            .await
             .call(|conn| -> Result<(), tokio_rusqlite::rusqlite::Error> {
                 conn.execute_batch(
                     r#"
@@ -66,6 +73,8 @@ impl AgentStorage for SqliteAgentStorage {
         let now = now_millis()?;
 
         self.connection
+            .lock()
+            .await
             .call(move |conn| -> Result<(), tokio_rusqlite::rusqlite::Error> {
                 conn.execute(
                     "INSERT INTO events (session_id, payload, created_at) VALUES (?1, ?2, ?3)",
@@ -83,6 +92,8 @@ impl AgentStorage for SqliteAgentStorage {
         let now = now_millis()?;
 
         self.connection
+            .lock()
+            .await
             .call(move |conn| -> Result<(), tokio_rusqlite::rusqlite::Error> {
                 conn.execute(
                     "INSERT INTO events (session_id, payload, created_at) VALUES (?1, ?2, ?3)",
@@ -99,6 +110,8 @@ impl AgentStorage for SqliteAgentStorage {
 
         let rows =
             self.connection
+                .lock()
+                .await
                 .call(
                     move |conn| -> Result<Vec<(isize, String)>, tokio_rusqlite::rusqlite::Error> {
                         let mut stmt = conn.prepare(
@@ -114,12 +127,17 @@ impl AgentStorage for SqliteAgentStorage {
                 )
                 .await?;
 
-        rows.into_iter()
+        let mut events: Vec<AgentEventAny> = rows
+            .into_iter()
             .map(|(_, payload)| {
-                let jrpc: JsonRpcNotification = serde_json::from_str(&payload)?;
-                AgentEventAny::try_from(jrpc).map_err(|e| anyhow::anyhow!(e.to_string()))
+                let jrpc: JsonRpcNotification = serde_json::from_str(&payload).unwrap();
+                AgentEventAny::try_from(jrpc)
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))
+                    .unwrap()
             })
-            .collect()
+            .collect();
+        events.sort_by_key(|a| a.timestamp());
+        Ok(events)
     }
 }
 
@@ -164,6 +182,8 @@ mod tests {
         .expect("Should be able to create a session");
         let rows =
             sql.connection
+                .lock()
+                .await
                 .call(
                     move |conn| -> Result<Vec<(isize, String)>, tokio_rusqlite::rusqlite::Error> {
                         let mut stmt = conn.prepare(

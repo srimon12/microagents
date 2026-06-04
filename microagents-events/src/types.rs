@@ -143,8 +143,6 @@ mod tests {
         let trf = ToolResult::Err("error!".to_string());
         let value_s = serde_json::to_value(trs).expect("Should be able to convert to value");
         let value_f = serde_json::to_value(trf).expect("Should be able to convert to value");
-        dbg!(value_s.clone());
-        dbg!(value_f.clone());
         assert_eq!(
             value_s,
             json!({

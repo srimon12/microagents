@@ -1,12 +1,8 @@
 use microagents_events::types::{AgentEvent, JsonRpcNotification};
 use microagents_events::{AgentEventAny, SessionInitEvent};
-use std::io::Read;
-use std::{
-    fs::{self, OpenOptions},
-    io::Write,
-    path::PathBuf,
-    sync::OnceLock,
-};
+use std::{path::PathBuf, sync::OnceLock};
+use tokio::fs::OpenOptions;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::types::AgentStorage;
 
@@ -41,11 +37,11 @@ impl JsonlAgentStorage {
         }
     }
 
-    fn ensure_sessions_dir(&self) -> anyhow::Result<()> {
-        if self.jsonl_path.exists() {
+    async fn ensure_sessions_dir(&self) -> anyhow::Result<()> {
+        if self.jsonl_path.is_dir() {
             return Ok(());
         }
-        fs::create_dir_all(&self.jsonl_path)?;
+        tokio::fs::create_dir_all(&self.jsonl_path).await?;
         Ok(())
     }
 }
@@ -53,39 +49,58 @@ impl JsonlAgentStorage {
 #[async_trait::async_trait]
 impl AgentStorage for JsonlAgentStorage {
     async fn create_session(&self, event: SessionInitEvent) -> anyhow::Result<()> {
-        self.ensure_sessions_dir()?;
+        self.ensure_sessions_dir().await?;
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(self.jsonl_path.join(format!("{}.jsonl", event.session_id)))?;
+            .open(self.jsonl_path.join(format!("{}.jsonl", event.session_id)))
+            .await?;
         let event_json = serde_json::to_string(&event.to_jsonrpc())?;
-        writeln!(file, "{}", event_json)?;
+        file.write_all(format!("{}\n", event_json).as_bytes())
+            .await?;
         Ok(())
     }
 
     async fn update_session(&self, event: AgentEventAny) -> anyhow::Result<()> {
-        self.ensure_sessions_dir()?;
-        let mut file = OpenOptions::new().create(true).append(true).open(
-            self.jsonl_path
-                .join(format!("{}.jsonl", &event.session_id())),
-        )?;
-        writeln!(file, "{}", serde_json::to_string(&event.to_jsonrpc())?)?;
+        self.ensure_sessions_dir().await?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(
+                self.jsonl_path
+                    .join(format!("{}.jsonl", event.session_id())),
+            )
+            .await?;
+        file.write_all(format!("{}\n", serde_json::to_string(&event.to_jsonrpc())?).as_bytes())
+            .await?;
         Ok(())
     }
 
     async fn get_session(&self, session_id: &str) -> anyhow::Result<Vec<AgentEventAny>> {
-        self.ensure_sessions_dir()?;
+        self.ensure_sessions_dir().await?;
         let mut file = OpenOptions::new()
             .read(true)
-            .open(self.jsonl_path.join(format!("{session_id}.jsonl")))?;
+            .open(self.jsonl_path.join(format!("{session_id}.jsonl")))
+            .await?;
         let mut buf = String::new();
-        file.read_to_string(&mut buf)?;
+        file.read_to_string(&mut buf).await?;
         let mut events = vec![];
+        let mut i = 0;
         for line in buf.lines() {
-            let jsrpc: JsonRpcNotification = serde_json::from_str(line)?;
+            i += 1;
+            let jsrpc: JsonRpcNotification = match serde_json::from_str(line.trim_end_matches("\n"))
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Corrupted line {:?}. Error detail: {}", i, e);
+                    continue;
+                }
+            };
             let event = AgentEventAny::try_from(jsrpc)?;
             events.push(event);
         }
+
+        events.sort_by_key(|a| a.timestamp());
 
         Ok(events)
     }
@@ -119,8 +134,9 @@ mod tests {
             })
             .await
             .expect("Should be able to create a session");
-        let content =
-            fs::read_to_string(tmp.path().join("1.jsonl")).expect("Should be able to read file");
+        let content = tokio::fs::read_to_string(tmp.path().join("1.jsonl"))
+            .await
+            .expect("Should be able to read file");
         let mut events = vec![];
         for line in content.lines() {
             let jsrpc: JsonRpcNotification =

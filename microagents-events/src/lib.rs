@@ -334,6 +334,21 @@ pub enum AgentEventAny {
     UserPromptSubmit(UserPromptSubmitEvent),
 }
 
+impl AgentEventAny {
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        match self {
+            Self::SessionInit(s) => s.timestamp,
+            Self::AssistantResponse(s) => s.timestamp,
+            Self::SessionStop(s) => s.timestamp,
+            Self::SkillLoad(s) => s.timestamp,
+            Self::StreamDelta(s) => s.timestamp,
+            Self::UserPromptSubmit(s) => s.timestamp,
+            Self::ToolCall(s) => s.timestamp,
+            Self::ToolResult(s) => s.timestamp,
+        }
+    }
+}
+
 impl AgentEvent for AgentEventAny {
     fn to_jsonrpc(&self) -> JsonRpcNotification {
         match self {
