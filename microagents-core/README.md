@@ -15,6 +15,7 @@ Core agent runtime for the **MicroAgents** ecosystem. It provides the building b
 ```rust
 use microagents_core::agent::MicroAgentBuilder;
 use microagents_core::types::ToolExecutionContext;
+use futures_util::StreamExt;
 
 let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
     .provider("openai".into())?

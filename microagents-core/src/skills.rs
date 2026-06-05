@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::{collections::HashMap, fs, io};
@@ -105,17 +104,17 @@ pub fn ensure_skill(skill_name: &str) -> Option<PathBuf> {
 /// Discover all available skills in both local and global directories.
 ///
 /// Duplicates are removed; local skills shadow global ones.
-pub fn find_skills() -> Result<HashSet<(String, String)>, SkillLoadingError> {
+pub fn find_skills() -> Result<HashMap<String, String>, SkillLoadingError> {
     let g = global_skills_path();
     let p = PathBuf::from(SKILLS_PATH);
-    let mut all_skills = HashSet::new();
+    let mut all_skills = HashMap::new();
     if g.exists() {
         let result = fs::read_dir(g)?;
         for entry in result {
             let entry = entry?;
             if entry.path().is_dir() {
                 let des = parse_skill(&entry.path().join("SKILL.md"))?;
-                all_skills.insert((entry.file_name().to_str().unwrap().to_string(), des));
+                all_skills.insert(entry.file_name().to_string_lossy().into_owned(), des);
             }
         }
     }
@@ -126,7 +125,7 @@ pub fn find_skills() -> Result<HashSet<(String, String)>, SkillLoadingError> {
             let entry = entry?;
             if entry.path().is_dir() {
                 let des = parse_skill(&entry.path().join("SKILL.md"))?;
-                all_skills.insert((entry.file_name().to_str().unwrap().to_string(), des));
+                all_skills.insert(entry.file_name().to_string_lossy().into_owned(), des);
             }
         }
     }

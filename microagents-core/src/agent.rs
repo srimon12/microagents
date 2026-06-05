@@ -488,9 +488,9 @@ impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
             })?;
             return Ok(ToolResult::Ok(content));
         }
-        Ok(ToolResult::Err(
-            "Skill {skill_name} could not found".to_string(),
-        ))
+        Ok(ToolResult::Err(format!(
+            "Skill {skill_name} could not be found"
+        )))
     }
 }
 
@@ -691,7 +691,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                     let ev = AgentEventAny::AssistantResponse(AssistantResponseEvent {
                         session_id: resolved_sid.clone(),
                         turn_id: turn_id.clone(),
-                        full_text: std::mem::take(&mut text),
+                        full_text: text.clone(),
                         tool_calls: None,
                         timestamp: Utc::now(),
                     });
