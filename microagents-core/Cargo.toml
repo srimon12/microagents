@@ -2,6 +2,12 @@
 name = "microagents-core"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/AstraBert/microagents"
+description = "Core microagents framework library"
+keywords = ["ai", "agents", "framework", "rust"]
+
 
 [dependencies]
 async-trait = "0.1.89"
@@ -15,9 +21,9 @@ regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 thiserror = "2.0.18"
-ultrafast-models-sdk = {version = "0.1.6", features = ["openai", "anthropic", "groq", "mistral", "cohere", "azure", "bedrock", "standalone", "ollama"]}
-microagents-events = {path = "../microagents-events"}
-microagents-storage = {path = "../microagents-storage"}
+ultrafast-models-sdk = { version = "0.1.6", features = ["openai", "anthropic", "groq", "mistral", "cohere", "azure", "bedrock", "standalone", "ollama"] }
+microagents-events = { path = "../microagents-events", version = "0.1.0" }
+microagents-storage = { path = "../microagents-storage", version = "0.1.0" }
 async-stream = "0.3.6"
 uuid = { version = "1.23.1", features = ["v4"] }
 tokio = { version = "1.52.3", features = ["full"] }

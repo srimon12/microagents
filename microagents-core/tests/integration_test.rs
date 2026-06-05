@@ -15,12 +15,12 @@ struct WeatherTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for WeatherTool {
-    fn name(&self) -> String {
-        "weather_tool".into()
+    fn name(&self) -> &'static str {
+        "weather_tool"
     }
 
-    fn description(&self) -> String {
-        "Get the weather for a give location".into()
+    fn description(&self) -> &'static str {
+        "Get the weather for a give location"
     }
 
     fn input_schema(&self) -> Value {
