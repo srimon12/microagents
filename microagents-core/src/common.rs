@@ -9,8 +9,20 @@ use ultrafast_models_sdk::{
 
 use crate::types::{AgentError, ToolExecutionContext, ToolFunction};
 
+/// Verify that an environment variable containing an API key is set.
+///
+/// Returns `Ok(())` if the variable exists, otherwise propagates the [`VarError`].
+pub fn check_api_key(api_key: &str) -> Result<(), std::env::VarError> {
+    let _ = std::env::var(api_key)?;
+    Ok(())
+}
+
+/// Convert a persisted [`AgentEventAny`] back into an SDK [`Message`].
+///
+/// Only events that correspond to chat roles (`User`, `Assistant`, `Tool`)
+/// produce a message. All other variants return [`None`].
 pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
-    let message: Option<Message> = match event {
+    match event {
         AgentEventAny::UserPromptSubmit(p) => Some(Message {
             role: Role::User,
             content: p.prompt,
@@ -64,18 +76,24 @@ pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
             })
         }
         _ => None,
-    };
-
-    message
+    }
 }
 
+/// Result of attempting to parse a (potentially partial) JSON string.
 pub enum JsonResult {
+    /// Fully valid JSON value.
     Valid(Value),
+    /// The input is a valid prefix but truncated (EOF while parsing).
     Incomplete,
+    /// The input is not valid JSON.
     Malformed,
 }
 
-pub fn is_valid_json(s: &str) -> JsonResult {
+/// Parse a JSON string that may be incomplete (e.g. streaming tool arguments).
+///
+/// Returns [`JsonResult::Incomplete`] when the payload is cut off mid-token,
+/// allowing the caller to buffer and retry.
+pub fn parse_json_fragment(s: &str) -> JsonResult {
     let v = serde_json::from_str::<Value>(s);
     match v {
         Ok(val) => JsonResult::Valid(val),
@@ -88,6 +106,11 @@ pub fn is_valid_json(s: &str) -> JsonResult {
     }
 }
 
+/// Validate tool arguments against its JSON schema and then execute it.
+///
+/// This is the canonical entry-point for invoking a [`ToolFunction`] from the
+/// agent runtime. It first checks schema conformance with `jsonschema`, then
+/// calls [`ToolFunction::execute`].
 pub async fn call_tool<Ctx: Send + Sync + 'static>(
     tool: Arc<dyn ToolFunction<Ctx>>,
     tool_args: Value,
@@ -253,24 +276,24 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_json_valid() {
-        match is_valid_json(r#"{"key": "value"}"#) {
+    fn test_parse_json_fragment_valid() {
+        match parse_json_fragment(r#"{"key": "value"}"#) {
             JsonResult::Valid(v) => assert_eq!(v["key"], "value"),
             _ => panic!("expected Valid"),
         }
     }
 
     #[test]
-    fn test_is_valid_json_incomplete() {
-        match is_valid_json(r#"{"key": "val""#) {
+    fn test_parse_json_fragment_incomplete() {
+        match parse_json_fragment(r#"{"key": "val""#) {
             JsonResult::Incomplete => {}
             _ => panic!("expected Incomplete"),
         }
     }
 
     #[test]
-    fn test_is_valid_json_malformed() {
-        match is_valid_json(r#"{"key": "value",}"#) {
+    fn test_parse_json_fragment_malformed() {
+        match parse_json_fragment(r#"{"key": "value",}"#) {
             JsonResult::Malformed => {}
             _ => panic!("expected Malformed"),
         }
@@ -283,11 +306,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ToolFunction<()> for DummyTool {
-        fn name(&self) -> String {
-            "dummy".into()
+        fn name(&self) -> &'static str {
+            "dummy"
         }
-        fn description(&self) -> String {
-            "desc".into()
+        fn description(&self) -> &'static str {
+            "desc"
         }
         fn input_schema(&self) -> Value {
             self.schema.clone()

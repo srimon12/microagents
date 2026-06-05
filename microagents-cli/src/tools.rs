@@ -94,12 +94,12 @@ pub struct SearchTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for SearchTool {
-    fn name(&self) -> String {
-        "search".into()
+    fn name(&self) -> &'static str {
+        "search"
     }
 
-    fn description(&self) -> String {
-        "Semantically search across files in the workspace. Returns the most relevant chunks with their document path and similarity score.".into()
+    fn description(&self) -> &'static str {
+        "Semantically search across files in the workspace. Returns the most relevant chunks with their document path and similarity score."
     }
 
     fn input_schema(&self) -> Value {
@@ -183,12 +183,12 @@ pub struct ReadTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for ReadTool {
-    fn name(&self) -> String {
-        "read".into()
+    fn name(&self) -> &'static str {
+        "read"
     }
 
-    fn description(&self) -> String {
-        "Read the contents of a file from the local filesystem. This tool also allows to extract the text content unstructured files (PDFs, Office documents, scanned images) through LiteParse.".into()
+    fn description(&self) -> &'static str {
+        "Read the contents of a file from the local filesystem. This tool also allows to extract the text content unstructured files (PDFs, Office documents, scanned images) through LiteParse."
     }
 
     fn input_schema(&self) -> Value {
@@ -244,12 +244,12 @@ pub struct WriteTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for WriteTool {
-    fn name(&self) -> String {
-        "write".into()
+    fn name(&self) -> &'static str {
+        "write"
     }
 
-    fn description(&self) -> String {
-        "Write content to a file, creating it (and parent directories) if needed. Overwrites the file if it exists.".into()
+    fn description(&self) -> &'static str {
+        "Write content to a file, creating it (and parent directories) if needed. Overwrites the file if it exists."
     }
 
     fn input_schema(&self) -> Value {
@@ -313,12 +313,12 @@ pub struct EditTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for EditTool {
-    fn name(&self) -> String {
-        "edit".into()
+    fn name(&self) -> &'static str {
+        "edit"
     }
 
-    fn description(&self) -> String {
-        "Edit a file by replacing an exact occurrence of `old_str` with `new_str`. The `old_str` must match exactly once in the file.".into()
+    fn description(&self) -> &'static str {
+        "Edit a file by replacing an exact occurrence of `old_str` with `new_str`. The `old_str` must match exactly once in the file."
     }
 
     fn input_schema(&self) -> Value {
@@ -392,12 +392,12 @@ pub struct ShellExecuteTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for ShellExecuteTool {
-    fn name(&self) -> String {
-        "shell_execute".into()
+    fn name(&self) -> &'static str {
+        "shell_execute"
     }
 
-    fn description(&self) -> String {
-        "Execute a shell command and return its stdout, stderr, and exit status. Supports Bash-compatible shells and Powershell.".into()
+    fn description(&self) -> &'static str {
+        "Execute a shell command and return its stdout, stderr, and exit status. Supports Bash-compatible shells and Powershell."
     }
 
     fn input_schema(&self) -> Value {

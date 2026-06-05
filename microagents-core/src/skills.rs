@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::{collections::HashMap, fs, io};
 use thiserror::Error;
 
+/// Lazily-initialised path to the global skills directory (`~/.agents/skills`).
 pub static GLOBAL_SKILLS_PATH: OnceLock<PathBuf> = OnceLock::new();
 
+/// Return the global skills directory, creating the cached path on first call.
 pub fn global_skills_path() -> &'static PathBuf {
     GLOBAL_SKILLS_PATH.get_or_init(|| {
         dirs::home_dir()
@@ -16,6 +18,7 @@ pub fn global_skills_path() -> &'static PathBuf {
     })
 }
 
+/// Relative path to the project-local skills directory.
 pub const SKILLS_PATH: &str = ".agents/skills";
 
 fn null_as_empty_map<'de, D>(
@@ -42,6 +45,7 @@ where
     }
 }
 
+/// Frontmatter extracted from a skill's `SKILL.md` file.
 #[derive(Debug, Serialize, Deserialize)]
 struct SkillFrontmatter {
     name: String,
@@ -60,21 +64,32 @@ struct SkillFrontmatter {
     license: Option<String>,
 }
 
+/// Errors that can occur while loading a skill from disk.
 #[derive(Debug, Error)]
 pub enum SkillLoadingError {
+    /// The skill file could not be read.
     #[error("Error while reading the skill file")]
     SkillReadError(#[from] io::Error),
+    /// The YAML/TOML frontmatter in the skill file is invalid.
     #[error("Error while parsing the skill's frontmatter")]
     SkillFrontMatterError(#[from] markdown_frontmatter::Error),
 }
 
-pub fn parse_skill(skill_file: &PathBuf) -> Result<String, SkillLoadingError> {
+/// Parse a skill's `SKILL.md` and return its description.
+///
+/// The file is expected to contain YAML frontmatter with at least a
+/// `description` field.
+pub fn parse_skill(skill_file: &Path) -> Result<String, SkillLoadingError> {
     let content = fs::read_to_string(skill_file)?;
     let (frontmatter, _) = markdown_frontmatter::parse::<SkillFrontmatter>(&content)?;
 
     Ok(frontmatter.description)
 }
 
+/// Locate a skill by name, preferring the local project directory.
+///
+/// Searches `.agents/skills/{name}` first, then `~/.agents/skills/{name}`.
+/// Returns `None` if the skill cannot be found in either location.
 pub fn ensure_skill(skill_name: &str) -> Option<PathBuf> {
     let g = global_skills_path().join(skill_name);
     let p = PathBuf::from(SKILLS_PATH).join(skill_name);
@@ -86,17 +101,20 @@ pub fn ensure_skill(skill_name: &str) -> Option<PathBuf> {
     None
 }
 
-pub fn find_skills() -> Result<Vec<(String, String)>, SkillLoadingError> {
+/// Discover all available skills in both local and global directories.
+///
+/// Duplicates are removed; local skills shadow global ones.
+pub fn find_skills() -> Result<HashMap<String, String>, SkillLoadingError> {
     let g = global_skills_path();
     let p = PathBuf::from(SKILLS_PATH);
-    let mut all_skills = vec![];
+    let mut all_skills = HashMap::new();
     if g.exists() {
         let result = fs::read_dir(g)?;
         for entry in result {
             let entry = entry?;
             if entry.path().is_dir() {
                 let des = parse_skill(&entry.path().join("SKILL.md"))?;
-                all_skills.push((entry.file_name().to_str().unwrap().to_string(), des));
+                all_skills.insert(entry.file_name().to_string_lossy().into_owned(), des);
             }
         }
     }
@@ -107,7 +125,7 @@ pub fn find_skills() -> Result<Vec<(String, String)>, SkillLoadingError> {
             let entry = entry?;
             if entry.path().is_dir() {
                 let des = parse_skill(&entry.path().join("SKILL.md"))?;
-                all_skills.push((entry.file_name().to_str().unwrap().to_string(), des));
+                all_skills.insert(entry.file_name().to_string_lossy().into_owned(), des);
             }
         }
     }

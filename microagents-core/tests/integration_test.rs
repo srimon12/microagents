@@ -15,12 +15,12 @@ struct WeatherTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for WeatherTool {
-    fn name(&self) -> String {
-        "weather_tool".into()
+    fn name(&self) -> &'static str {
+        "weather_tool"
     }
 
-    fn description(&self) -> String {
-        "Get the weather for a give location".into()
+    fn description(&self) -> &'static str {
+        "Get the weather for a give location"
     }
 
     fn input_schema(&self) -> Value {
@@ -68,7 +68,8 @@ async fn test_microagent_integration() {
         .custom_instructions("Always call the weather_tool when asked about the weather".into())
         .add_tool(Arc::new(WeatherTool))
         .expect("Should be able to register tool")
-        .build();
+        .build()
+        .expect("Should be able to build the agent");
     let mut events = vec![];
     let mut stream = agent
         .run("What is the weather in San Francisco?".into(), None)

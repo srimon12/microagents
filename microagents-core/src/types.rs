@@ -4,34 +4,54 @@ use std::{env::VarError, fmt::Debug, pin::Pin, sync::Arc};
 use thiserror::Error;
 use ultrafast_models_sdk::models::{Function, StreamChunk, Tool};
 
+/// Errors that can occur during agent execution.
 #[derive(Error, Debug)]
 pub enum AgentError {
+    /// The LLM generation step failed.
     #[error("Generation failed because of {0}")]
     GenerationError(String),
+    /// A skill could not be resolved.
     #[error("Skill resolution failed")]
     SkillResolutionError,
+    /// A tool call failed.
     #[error("Tool call failed because of {0}")]
     ToolCallError(String),
+    /// The overall run failed.
     #[error("Run failure: {0}")]
     RunError(String),
+    /// The LLM client could not be initialized.
     #[error("Unable to initialize client: {0}")]
     ClientInitFailed(String),
+    /// An API key environment variable was missing.
     #[error("API key not configured for provider")]
     ApiKeyNotConfigured(#[from] VarError),
+    /// Loading a persisted session failed.
     #[error("Session load error: {0}")]
     SessionLoadError(String),
+    /// Converting an event to a chat message failed.
     #[error("Conversion error from agent event to message")]
     EventConversionError,
 }
 
+/// A single item yielded by a [`GenerationStream`].
 pub type StreamItem = Result<StreamChunk, AgentError>;
+/// Stream of raw LLM chunks returned by [`Agent::generate`].
 pub type GenerationStream = Pin<Box<dyn futures_core::Stream<Item = StreamItem> + Send>>;
+/// A single event yielded by a [`RunStream`].
 pub type RunStreamItem = Result<AgentEventAny, AgentError>;
+/// Stream of high-level agent events returned by [`Agent::run`].
 pub type RunStream = Pin<Box<dyn futures_core::Stream<Item = RunStreamItem> + Send>>;
 
+/// Core trait for agent implementations.
+///
+/// [`generate`] performs a single LLM call and returns the raw token stream.
+/// [`run`] executes a full turn (or multi-turn) conversation, handling tool
+/// calls, skills, and session persistence automatically.
 #[async_trait::async_trait]
 pub trait Agent: Send + Sync {
+    /// Generate the next assistant response as a raw token stream.
     async fn generate(&mut self) -> Result<GenerationStream, AgentError>;
+    /// Run a complete conversation turn, optionally resuming an existing session.
     async fn run(
         mut self,
         prompt: String,
@@ -39,12 +59,16 @@ pub trait Agent: Send + Sync {
     ) -> Result<RunStream, AgentError>;
 }
 
-#[derive(Debug)]
+/// Context passed to every [`ToolFunction`] invocation.
+///
+/// `Ctx` is user-defined state (e.g. a database handle, HTTP client, etc.).
+#[derive(Debug, Clone)]
 pub struct ToolExecutionContext<Ctx> {
     pub context: Ctx,
 }
 
 impl<Ctx> ToolExecutionContext<Ctx> {
+    /// Wrap user context so it can be shared with tools.
     pub fn new(context: Ctx) -> Self {
         Self { context }
     }
@@ -56,22 +80,32 @@ impl<Ctx: Default> Default for ToolExecutionContext<Ctx> {
     }
 }
 
+/// A callable tool that the agent can invoke.
+///
+/// Implementors define the JSON schema, description, and execution logic.
+/// The agent automatically serialises the LLM's arguments and validates them
+/// against [`input_schema`] before calling [`execute`].
 #[async_trait::async_trait]
 pub trait ToolFunction<Ctx>: Debug + Send + Sync {
-    fn name(&self) -> String;
-    fn description(&self) -> String;
+    /// Unique tool name exposed to the LLM.
+    fn name(&self) -> &'static str;
+    /// Human-readable description exposed to the LLM.
+    fn description(&self) -> &'static str;
+    /// JSON Schema describing the arguments this tool accepts.
     fn input_schema(&self) -> Value;
+    /// Run the tool with the validated arguments.
     async fn execute(
         &self,
         input: Value,
         ctx: &Arc<ToolExecutionContext<Ctx>>,
     ) -> Result<ToolResult, AgentError>;
+    /// Convert this tool into the SDK representation used for chat requests.
     fn to_sdk_tool(&self) -> Tool {
         Tool {
             tool_type: "function".into(),
             function: Function {
-                name: self.name(),
-                description: Some(self.description()),
+                name: self.name().to_owned(),
+                description: Some(self.description().to_owned()),
                 parameters: self.input_schema(),
             },
         }
@@ -89,12 +123,12 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ToolFunction<()> for MyTool {
-        fn name(&self) -> String {
-            "tool".to_string()
+        fn name(&self) -> &'static str {
+            "tool"
         }
 
-        fn description(&self) -> String {
-            "description".to_string()
+        fn description(&self) -> &'static str {
+            "description"
         }
 
         fn input_schema(&self) -> Value {
@@ -115,8 +149,11 @@ mod tests {
         let tool = MyTool {};
         let sdk_tool = tool.to_sdk_tool();
         assert_eq!(sdk_tool.tool_type, "function".to_string());
-        assert_eq!(sdk_tool.function.name, tool.name());
-        assert_eq!(sdk_tool.function.description, Some(tool.description()));
+        assert_eq!(sdk_tool.function.name, tool.name().to_owned());
+        assert_eq!(
+            sdk_tool.function.description,
+            Some(tool.description().to_owned())
+        );
         assert_eq!(sdk_tool.function.parameters, tool.input_schema());
     }
 }
