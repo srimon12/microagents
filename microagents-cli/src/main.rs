@@ -89,37 +89,24 @@ async fn build_agent(
         .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
     let base_builder = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()))
         .model(model.unwrap_or(prov.default_model().to_string()))
-        .provider(provider.unwrap_or("openrouter".into()))
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
+        .provider(provider.unwrap_or("openrouter".into()))?
         .storage(st)
-        .await
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
-        .add_tool(Arc::new(tools::WriteTool))
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
-        .add_tool(Arc::new(tools::EditTool))
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
-        .add_tool(Arc::new(tools::ShellExecuteTool))
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
-        .add_tool(Arc::new(tools::SearchTool))
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
-        .add_tool(Arc::new(tools::ReadTool))
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
+        .await?
+        .add_tool(Arc::new(tools::WriteTool))?
+        .add_tool(Arc::new(tools::EditTool))?
+        .add_tool(Arc::new(tools::ShellExecuteTool))?
+        .add_tool(Arc::new(tools::SearchTool))?
+        .add_tool(Arc::new(tools::ReadTool))?;
     let base_builder = if skills.is_empty() {
-        base_builder
-            .find_skills()
-            .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?
+        base_builder.find_skills()?
     } else {
         let mut builder = base_builder;
         for skill in skills {
-            builder = builder
-                .add_skill(skill)
-                .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
+            builder = builder.add_skill(skill)?;
         }
         builder
     };
-    base_builder
-        .build()
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))
+    Ok(base_builder.build()?)
 }
 
 #[tokio::main]
