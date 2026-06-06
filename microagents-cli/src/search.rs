@@ -3,7 +3,6 @@ use qdrant_edge::{
     Prefetch, QueryEnum, QueryRequest, ScoringQuery, SparseVector, WithPayloadInterface,
     WithVector, external::ordered_float::OrderedFloat,
 };
-use serde_json::Value;
 use std::str::FromStr;
 
 use crate::init_env::{EmbeddingPayload, SPARSE_VECTORS_NAME, VECTORS_NAME, load_qdrant_edge};
@@ -17,14 +16,7 @@ pub struct ResultWithScore {
 
 /// Convert Qdrant Payload back to DocMeta
 fn payload_to_struct(payload: &Payload) -> Result<EmbeddingPayload, Box<dyn std::error::Error>> {
-    let json_map: serde_json::Map<String, Value> = payload
-        .0
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-
-    let json_value = Value::Object(json_map);
-    let ep: EmbeddingPayload = serde_json::from_value(json_value)?;
+    let ep: EmbeddingPayload = serde_json::from_value(serde_json::to_value(payload)?)?;
     Ok(ep)
 }
 

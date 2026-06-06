@@ -4,6 +4,8 @@ use std::{env::VarError, fmt::Debug, pin::Pin, sync::Arc};
 use thiserror::Error;
 use ultrafast_models_sdk::models::{Function, StreamChunk, Tool};
 
+use crate::agent::MicroAgentBuilderError;
+
 /// Errors that can occur during agent execution.
 #[derive(Error, Debug)]
 pub enum AgentError {
@@ -22,8 +24,11 @@ pub enum AgentError {
     /// The LLM client could not be initialized.
     #[error("Unable to initialize client: {0}")]
     ClientInitFailed(String),
+    /// MicroAgentBuilder error
+    #[error(transparent)]
+    BuilderError(#[from] MicroAgentBuilderError),
     /// An API key environment variable was missing.
-    #[error("API key not configured for provider")]
+    #[error(transparent)]
     ApiKeyNotConfigured(#[from] VarError),
     /// Loading a persisted session failed.
     #[error("Session load error: {0}")]

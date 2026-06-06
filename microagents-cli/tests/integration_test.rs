@@ -249,7 +249,7 @@ if __name__ == '__main__':
     let mut chunks_text =
         chunk(".txt", text.to_string()).expect("Should be able to chunk the given text");
     chunks_code.append(&mut chunks_text);
-    chunks_code = embed(&mut chunks_code);
+    chunks_code = embed(chunks_code);
     assert!(chunks_code.len() >= 2);
     for c in chunks_code {
         assert!(c.embedding.is_some_and(|e| e.len() == 256));

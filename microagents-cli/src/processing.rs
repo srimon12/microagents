@@ -68,7 +68,7 @@ fn infer_language_from_extension(ext: &str) -> Option<Language> {
     }
 }
 
-fn reconstruct_content(lines: Vec<&str>, line_start: usize, line_end: usize) -> String {
+fn reconstruct_content(lines: &[&str], line_start: usize, line_end: usize) -> String {
     lines[line_start..line_end - 1].join("\n")
 }
 
@@ -85,7 +85,7 @@ fn chunk_code(lang: Language, source: &str) -> Result<Vec<Chunk>, Box<dyn std::e
     for c in ast_chunks {
         let ch = Chunk::new(
             reconstruct_content(
-                lines.clone(),
+                &lines,
                 c.line_index_range.start as usize,
                 c.line_index_range.end as usize,
             ),
@@ -116,7 +116,7 @@ pub fn chunk(extension: &str, content: String) -> Result<Vec<Chunk>, Box<dyn std
     Ok(chunks)
 }
 
-pub fn embed(chunks: &mut Vec<Chunk>) -> Vec<Chunk> {
+pub fn embed(mut chunks: Vec<Chunk>) -> Vec<Chunk> {
     let bm25 = bm25_embedder();
     let embedder = embedding_model();
     for c in &mut *chunks {
@@ -125,7 +125,7 @@ pub fn embed(chunks: &mut Vec<Chunk>) -> Vec<Chunk> {
         c.embedding = Some(dense_embd);
         c.sparse_embedding = Some(sparse_embd);
     }
-    chunks.to_vec()
+    chunks
 }
 
 pub fn embed_query(query: &str) -> (Vec<f32>, SparseVector) {

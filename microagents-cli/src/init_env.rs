@@ -2,18 +2,21 @@ use ignore::WalkBuilder;
 use liteparse::{LiteParse, LiteParseConfig};
 use model2vec_rs::model::StaticModel;
 use qdrant_edge::{
-    Condition, Distance, EdgeConfig, EdgeShard, EdgeSparseVectorParams, EdgeVectorParams,
-    FieldCondition, Filter, JsonPath, Match, PointId, PointInsertOperations, PointOperations,
-    PointStruct, PointStructPersisted, QuantizationConfig, SparseVector, UpdateOperation, Vector,
-    Vectors,
+    AnyVariants, Condition, Distance, EdgeConfig, EdgeShard, EdgeSparseVectorParams,
+    EdgeVectorParams, FieldCondition, Filter, JsonPath, Match, PointId, PointInsertOperations,
+    PointOperations, PointStruct, PointStructPersisted, QuantizationConfig, SparseVector,
+    UpdateOperation, Vector, Vectors,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 use std::time::SystemTime;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 use crate::processing::{chunk, embed};
 
@@ -22,7 +25,7 @@ const SHARD_DIRECTORY: &str = ".microagents/vectors";
 pub const VECTORS_NAME: &str = "dense_text";
 pub const SPARSE_VECTORS_NAME: &str = "sparse_text";
 const VECTORS_SIZE: usize = 256;
-const BATCH_SIZE: usize = 1000;
+const INGESTION_CONCURRENCY: usize = 10;
 pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
     ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp", ".svg", ".doc", ".docx",
     ".docm", ".odt", ".rtf", ".ppt", ".pptx", ".pptm", ".odp", ".xls", ".xlsx", ".xlsm", ".ods",
@@ -171,7 +174,7 @@ fn resolve_root_path() -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
 /// Resolve the project root, falling back to CWD if no index file exists yet.
 /// Always returns an absolute path so downstream operations (file walking,
 /// reading) are independent of the process CWD.
-fn root_or_cwd() -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub fn root_or_cwd() -> Result<PathBuf, Box<dyn std::error::Error>> {
     match resolve_root_path()? {
         Some(p) => Ok(p),
         None => Ok(std::env::current_dir()?),
@@ -206,16 +209,28 @@ fn collect_files() -> Result<HashMap<String, Document>, Box<dyn std::error::Erro
     Ok(paths)
 }
 
-fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::error::Error>> {
-    let new_content = serde_json::to_string(&files)?;
+fn persist_file_changes(new_content: String) -> Result<(), Box<dyn std::error::Error>> {
     let root_path = root_or_cwd()?;
     let p = root_path.join(FILES_INDEX);
+    if p.exists() {
+        let mut tmp_path = tempfile::NamedTempFile::new_in(&root_path)?;
+        tmp_path.write_all(new_content.as_bytes())?;
+        tmp_path.flush()?;
+        tmp_path.persist(&p)?;
+        return Ok(());
+    }
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent)?;
     }
+    fs::write(&p, new_content)?;
+    Ok(())
+}
+
+fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::error::Error>> {
+    let root_path = root_or_cwd()?;
+    let p = root_path.join(FILES_INDEX);
     if p.exists() {
         let content = fs::read_to_string(&p)?;
-        fs::write(&p, new_content)?;
         let fls: HashMap<String, Document> = serde_json::from_str(&content)?;
         let paths_now: HashSet<&str> = files.keys().map(|k| k.as_str()).collect();
         let paths_before: HashSet<&str> = fls.keys().map(|k| k.as_str()).collect();
@@ -238,7 +253,6 @@ fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::err
             modified: modified.iter().map(|s| s.to_string()).collect(),
         });
     }
-    fs::write(&p, new_content)?;
 
     Ok(Diff {
         created: files.keys().cloned().collect(),
@@ -281,26 +295,71 @@ fn upload_embeddings(eps: Vec<EmbeddingWithPayload>) -> Result<(), Box<dyn std::
         return Ok(());
     }
     let edge = load_qdrant_edge()?;
+    let mut points: Vec<PointStructPersisted> = vec![];
 
-    for chunk in eps.chunks(BATCH_SIZE) {
-        let mut points: Vec<PointStructPersisted> = vec![];
-        for embd in chunk {
-            let payload_json = serde_json::to_value(&embd.payload)?;
-            let point = make_point(
-                uuid::Uuid::new_v4(),
-                embd.embedding.clone(),
-                embd.sparse_embedding.clone(),
-                payload_json,
-            );
-            points.push(point.into());
-        }
-        let operation = UpdateOperation::PointOperation(PointOperations::UpsertPoints(
-            PointInsertOperations::PointsList(points),
-        ));
-        edge.update(operation)?;
+    for embd in eps.into_iter() {
+        let payload_json = serde_json::to_value(&embd.payload)?;
+        let point = make_point(
+            uuid::Uuid::new_v4(),
+            embd.embedding,
+            embd.sparse_embedding,
+            payload_json,
+        );
+        points.push(point.into());
     }
 
+    let operation = UpdateOperation::PointOperation(PointOperations::UpsertPoints(
+        PointInsertOperations::PointsList(points),
+    ));
+    edge.update(operation)?;
+
     Ok(())
+}
+
+async fn ingest_one(abs_path: &PathBuf) -> Result<Vec<EmbeddingWithPayload>, String> {
+    let ext = abs_path
+        .extension()
+        .unwrap_or_default()
+        .to_str()
+        .map(|s| format!(".{}", s.to_lowercase()))
+        .unwrap_or_default();
+    let content = if SUPPORTED_LIT_EXTENSIONS.contains(&ext.as_str()) {
+        let abs_str = abs_path.to_string_lossy().to_string();
+        match parser().parse(&abs_str).await {
+            Err(_) => {
+                return Err(abs_path.to_string_lossy().to_string());
+            }
+            Ok(p) => p.text,
+        }
+    } else {
+        match fs::read_to_string(abs_path) {
+            Err(_) => {
+                return Err(abs_path.to_string_lossy().to_string());
+            }
+            Ok(p) => p,
+        }
+    };
+
+    let chunks =
+        chunk(ext.as_str(), content).map_err(|_| abs_path.to_string_lossy().to_string())?;
+    if chunks.is_empty() {
+        return Ok(vec![]);
+    }
+    let chunks = embed(chunks);
+    let mut embeddings_with_payloads: Vec<EmbeddingWithPayload> = Vec::with_capacity(chunks.len());
+    for chunk in chunks {
+        embeddings_with_payloads.push(EmbeddingWithPayload {
+            embedding: chunk.embedding.unwrap(),
+            sparse_embedding: chunk.sparse_embedding.unwrap(),
+            payload: EmbeddingPayload {
+                document_path: abs_path.to_string_lossy().replace('\\', "/"),
+                content: chunk.content,
+                line_start: chunk.line_start,
+                line_end: chunk.line_end,
+            },
+        });
+    }
+    Ok(embeddings_with_payloads)
 }
 
 async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::error::Error>> {
@@ -309,54 +368,36 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
     }
     let root_path = root_or_cwd()?;
     let mut failed = HashSet::new();
-    let mut embeddings_with_payloads: Vec<EmbeddingWithPayload> = Vec::new();
+    let mut join_set = JoinSet::new();
+    let semaphore = Arc::new(Semaphore::new(INGESTION_CONCURRENCY));
     for fl in to_ingest {
         let abs_path = root_path.join(&fl);
-        let ext = Path::new(&fl)
-            .extension()
-            .unwrap_or_default()
-            .to_str()
-            .map(|s| format!(".{}", s.to_lowercase()))
-            .unwrap_or_default();
-        let content = if SUPPORTED_LIT_EXTENSIONS.contains(&ext.as_str()) {
-            let abs_str = abs_path.to_string_lossy().to_string();
-            match parser().parse(&abs_str).await {
-                Err(_) => {
-                    failed.insert(fl);
-                    continue;
-                }
-                Ok(p) => p.text,
-            }
-        } else {
-            match fs::read_to_string(&abs_path) {
-                Err(_) => {
-                    failed.insert(fl);
-                    continue;
-                }
-                Ok(p) => p,
-            }
-        };
+        let permit = semaphore.clone().acquire_owned().await?;
+        join_set.spawn(async move {
+            let _permit = permit;
+            ingest_one(&abs_path).await
+        });
+    }
 
-        let mut chunks = chunk(ext.as_str(), content)?;
-        if chunks.is_empty() {
-            continue;
-        }
-        let chunks = embed(&mut chunks);
-        for chunk in chunks {
-            embeddings_with_payloads.push(EmbeddingWithPayload {
-                embedding: chunk.embedding.unwrap(),
-                sparse_embedding: chunk.sparse_embedding.unwrap(),
-                payload: EmbeddingPayload {
-                    document_path: abs_path.to_string_lossy().replace('\\', "/"),
-                    content: chunk.content,
-                    line_start: chunk.line_start,
-                    line_end: chunk.line_end,
-                },
-            });
+    let mut panicked = 0;
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(v)) => {
+                upload_embeddings(v)?;
+            }
+            Ok(Err(e)) => {
+                failed.insert(e);
+            }
+            Err(e) => {
+                eprintln!("✗ Error while executing the ingestion function: {e}");
+                panicked += 1;
+            } // JoinError
         }
     }
 
-    upload_embeddings(embeddings_with_payloads)?;
+    if panicked != 0 {
+        eprintln!("Panicked while ingesting {:?} files", panicked);
+    }
 
     if !failed.is_empty() {
         eprintln!(
@@ -374,18 +415,16 @@ fn delete_files(to_delete: HashSet<String>) -> Result<(), Box<dyn std::error::Er
         return Ok(());
     }
     let edge = load_qdrant_edge()?;
-    for path in to_delete {
-        let condition = Condition::Field(FieldCondition::new_match(
-            "document_path"
-                .parse::<JsonPath>()
-                .map_err(|_| "invalid json path")?,
-            Match::from(path),
-        ));
-        let filter = Filter::new_must(condition);
-        let operation =
-            UpdateOperation::PointOperation(PointOperations::DeletePointsByFilter(filter));
-        edge.update(operation)?;
-    }
+    let condition = Condition::Field(FieldCondition::new_match(
+        "document_path"
+            .parse::<JsonPath>()
+            .map_err(|_| "invalid json path")?,
+        Match::from(AnyVariants::Strings(to_delete.iter().cloned().collect())),
+    ));
+    let filter = Filter::new_must(condition);
+    let operation = UpdateOperation::PointOperation(PointOperations::DeletePointsByFilter(filter));
+    edge.update(operation)?;
+
     Ok(())
 }
 
@@ -405,6 +444,7 @@ pub async fn initialize_environment(
     if verbose {
         println!("Collected all the files in the current directory...");
     }
+    let files_content = serde_json::to_string(&files)?;
     let diff = diff_files(files)?;
 
     if verbose {
@@ -428,6 +468,7 @@ pub async fn initialize_environment(
 
     delete_files(diff.to_delete())?;
     ingest_files(diff.to_reingest()).await?;
+    persist_file_changes(files_content)?;
 
     Ok((diff.created.len(), diff.modified.len(), diff.deleted.len()))
 }
