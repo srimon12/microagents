@@ -212,9 +212,6 @@ fn collect_files() -> Result<HashMap<String, Document>, Box<dyn std::error::Erro
 fn persist_file_changes(new_content: String) -> Result<(), Box<dyn std::error::Error>> {
     let root_path = root_or_cwd()?;
     let p = root_path.join(FILES_INDEX);
-    if let Some(parent) = p.parent() {
-        fs::create_dir_all(parent)?;
-    }
     if p.exists() {
         let mut tmp_path = tempfile::NamedTempFile::new_in(&root_path)?;
         tmp_path.write_all(new_content.as_bytes())?;
@@ -448,7 +445,7 @@ pub async fn initialize_environment(
         println!("Collected all the files in the current directory...");
     }
     let files_content = serde_json::to_string(&files)?;
-    let diff = diff_files(files.clone())?;
+    let diff = diff_files(files)?;
 
     if verbose {
         println!(

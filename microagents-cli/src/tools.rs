@@ -97,10 +97,15 @@ fn is_dangerous(cmd: &str) -> bool {
 fn is_within_root(path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
     let root = root_or_cwd()?;
     let canonical_root = root.canonicalize()?;
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    };
 
     // Walk up to the nearest existing ancestor, since `path` itself may not exist yet
     // (e.g., a new file or a directory that will be created by the tool).
-    let mut ancestor = path;
+    let mut ancestor = candidate.as_path();
     loop {
         if ancestor.exists() {
             let canonical_ancestor = ancestor.canonicalize()?;
