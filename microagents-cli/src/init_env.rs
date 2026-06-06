@@ -320,14 +320,14 @@ async fn ingest_one(abs_path: &PathBuf) -> Result<Vec<EmbeddingWithPayload>, Str
         let abs_str = abs_path.to_string_lossy().to_string();
         match parser().parse(&abs_str).await {
             Err(_) => {
-                return Err(abs_path.to_string_lossy().to_string().into());
+                return Err(abs_path.to_string_lossy().to_string());
             }
             Ok(p) => p.text,
         }
     } else {
-        match fs::read_to_string(&abs_path) {
+        match fs::read_to_string(abs_path) {
             Err(_) => {
-                return Err(abs_path.to_string_lossy().to_string().into());
+                return Err(abs_path.to_string_lossy().to_string());
             }
             Ok(p) => p,
         }

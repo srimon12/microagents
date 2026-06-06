@@ -229,7 +229,7 @@ impl ToolFunction<()> for ReadTool {
         };
         let p = Path::new(path);
         let within_root =
-            is_within_root(&p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+            is_within_root(p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
         if !within_root {
             return Ok(ToolResult::Err(
                 "Path does not appear to be within the current workspace or its root is non-resolvable".into(),
@@ -301,7 +301,7 @@ impl ToolFunction<()> for WriteTool {
         };
         let p = Path::new(path);
         let within_root =
-            is_within_root(&p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+            is_within_root(p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
         if !within_root {
             return Ok(ToolResult::Err(
                 "Path does not appear to be within the current workspace or its root is non-resolvable".into(),
@@ -380,7 +380,7 @@ impl ToolFunction<()> for EditTool {
         };
         let p = Path::new(path);
         let within_root =
-            is_within_root(&p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+            is_within_root(p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
         if !within_root {
             return Ok(ToolResult::Err(
                 "Path does not appear to be within the current workspace or its root is non-resolvable".into(),
