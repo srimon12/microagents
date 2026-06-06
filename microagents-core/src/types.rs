@@ -25,10 +25,10 @@ pub enum AgentError {
     #[error("Unable to initialize client: {0}")]
     ClientInitFailed(String),
     /// MicroAgentBuilder error
-    #[error("Builder error")]
+    #[error(transparent)]
     BuilderError(#[from] MicroAgentBuilderError),
     /// An API key environment variable was missing.
-    #[error("API key not configured for provider")]
+    #[error(transparent)]
     ApiKeyNotConfigured(#[from] VarError),
     /// Loading a persisted session failed.
     #[error("Session load error: {0}")]

@@ -5,6 +5,8 @@ use regex::Regex;
 use serde_json::{Value, json};
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
@@ -95,8 +97,20 @@ fn is_dangerous(cmd: &str) -> bool {
 fn is_within_root(path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
     let root = root_or_cwd()?;
     let canonical_root = root.canonicalize()?;
-    let canonical_path = path.canonicalize()?;
-    Ok(canonical_path.starts_with(&canonical_root))
+
+    // Walk up to the nearest existing ancestor, since `path` itself may not exist yet
+    // (e.g., a new file or a directory that will be created by the tool).
+    let mut ancestor = path;
+    loop {
+        if ancestor.exists() {
+            let canonical_ancestor = ancestor.canonicalize()?;
+            return Ok(canonical_ancestor.starts_with(&canonical_root));
+        }
+        match ancestor.parent() {
+            Some(parent) => ancestor = parent,
+            None => return Ok(false),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -421,6 +435,29 @@ impl ToolFunction<()> for EditTool {
             .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
         tmp.write_all(updated.as_bytes())
             .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+
+        // Preserve original permissions/metadata before overwriting
+        if p.exists() {
+            match fs::metadata(p) {
+                Ok(meta) => {
+                    #[cfg(unix)]
+                    {
+                        let mode = meta.permissions().mode();
+                        let mut perms = fs::metadata(tmp.path())
+                            .map(|m| m.permissions())
+                            .unwrap_or_else(|_| std::fs::Permissions::from_mode(mode));
+                        perms.set_mode(mode);
+                        let _ = fs::set_permissions(tmp.path(), perms);
+                    }
+                    #[cfg(windows)]
+                    {
+                        let _ = fs::set_permissions(tmp.path(), meta.permissions());
+                    }
+                }
+                Err(_) => { /* ignore metadata read errors */ }
+            }
+        }
+
         tmp.persist(p)
             .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
 
@@ -457,7 +494,7 @@ impl ToolFunction<()> for ShellExecuteTool {
               "description": "Optional working directory for the command."
             },
             "timeout": {
-              "type": "number",
+              "type": "integer",
               "description": "Command execution timeout in seconds (only integers allowed). Defaults to 60 seconds."
             }
           }
@@ -493,7 +530,9 @@ impl ToolFunction<()> for ShellExecuteTool {
             c
         };
 
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
         if let Some(cwd) = input["cwd"].as_str() {
             cmd.current_dir(cwd);
         }

@@ -25,7 +25,7 @@ const SHARD_DIRECTORY: &str = ".microagents/vectors";
 pub const VECTORS_NAME: &str = "dense_text";
 pub const SPARSE_VECTORS_NAME: &str = "sparse_text";
 const VECTORS_SIZE: usize = 256;
-const BATCH_SIZE: usize = 1000;
+const INGESTION_CONCURRENCY: usize = 10;
 pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
     ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp", ".svg", ".doc", ".docx",
     ".docm", ".odt", ".rtf", ".ppt", ".pptx", ".pptm", ".odp", ".xls", ".xlsx", ".xlsm", ".ods",
@@ -233,10 +233,10 @@ fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::err
                 }
             }
         }
-        let mut tmp_path = tempfile::NamedTempFile::new_in(root_path)?;
+        let mut tmp_path = tempfile::NamedTempFile::new_in(&root_path)?;
         tmp_path.write_all(new_content.as_bytes())?;
         tmp_path.flush()?;
-        tmp_path.persist(FILES_INDEX)?;
+        tmp_path.persist(&p)?;
 
         return Ok(Diff {
             created: created.iter().map(|s| s.to_string()).collect(),
@@ -287,24 +287,23 @@ fn upload_embeddings(eps: Vec<EmbeddingWithPayload>) -> Result<(), Box<dyn std::
         return Ok(());
     }
     let edge = load_qdrant_edge()?;
+    let mut points: Vec<PointStructPersisted> = vec![];
 
-    for chunk in eps.chunks(BATCH_SIZE) {
-        let mut points: Vec<PointStructPersisted> = vec![];
-        for embd in chunk {
-            let payload_json = serde_json::to_value(&embd.payload)?;
-            let point = make_point(
-                uuid::Uuid::new_v4(),
-                embd.embedding.clone(),
-                embd.sparse_embedding.clone(),
-                payload_json,
-            );
-            points.push(point.into());
-        }
-        let operation = UpdateOperation::PointOperation(PointOperations::UpsertPoints(
-            PointInsertOperations::PointsList(points),
-        ));
-        edge.update(operation)?;
+    for embd in eps.into_iter() {
+        let payload_json = serde_json::to_value(&embd.payload)?;
+        let point = make_point(
+            uuid::Uuid::new_v4(),
+            embd.embedding,
+            embd.sparse_embedding,
+            payload_json,
+        );
+        points.push(point.into());
     }
+
+    let operation = UpdateOperation::PointOperation(PointOperations::UpsertPoints(
+        PointInsertOperations::PointsList(points),
+    ));
+    edge.update(operation)?;
 
     Ok(())
 }
@@ -361,9 +360,8 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
     }
     let root_path = root_or_cwd()?;
     let mut failed = HashSet::new();
-    let mut embeddings_with_payloads: Vec<EmbeddingWithPayload> = Vec::new();
     let mut join_set = JoinSet::new();
-    let semaphore = Arc::new(Semaphore::new(10));
+    let semaphore = Arc::new(Semaphore::new(INGESTION_CONCURRENCY));
     for fl in to_ingest {
         let abs_path = root_path.join(&fl);
         let permit = semaphore.clone().acquire_owned().await?;
@@ -376,11 +374,11 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
     let mut panicked = 0;
     while let Some(result) = join_set.join_next().await {
         match result {
-            Ok(Ok(mut v)) => {
-                embeddings_with_payloads.append(&mut v);
+            Ok(Ok(v)) => {
+                upload_embeddings(v)?;
             }
             Ok(Err(e)) => {
-                failed.insert(e.to_string());
+                failed.insert(e);
             }
             Err(e) => {
                 eprintln!("✗ Error while executing the ingestion function: {e}");
@@ -388,8 +386,6 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
             } // JoinError
         }
     }
-
-    upload_embeddings(embeddings_with_payloads)?;
 
     if panicked != 0 {
         eprintln!("Panicked while ingesting {:?} files", panicked);
