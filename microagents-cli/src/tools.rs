@@ -1,11 +1,14 @@
+use microagents_cli::init_env::root_or_cwd;
 use microagents_core::types::{AgentError, ToolExecutionContext, ToolFunction};
 use microagents_events::types::ToolResult;
 use regex::Regex;
 use serde_json::{Value, json};
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use tokio::process::Command;
 
@@ -87,6 +90,13 @@ fn is_dangerous(cmd: &str) -> bool {
     let re = dangerous_regex();
 
     re.is_match(cmd)
+}
+
+fn is_within_root(path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
+    let root = root_or_cwd()?;
+    let canonical_root = root.canonicalize()?;
+    let canonical_path = path.canonicalize()?;
+    Ok(canonical_path.starts_with(&canonical_root))
 }
 
 #[derive(Debug)]
@@ -218,6 +228,13 @@ impl ToolFunction<()> for ReadTool {
             }
         };
         let p = Path::new(path);
+        let within_root =
+            is_within_root(&p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+        if !within_root {
+            return Ok(ToolResult::Err(
+                "Path does not appear to be within the current workspace or its root is non-resolvable".into(),
+            ));
+        }
         if SUPPORTED_LIT_EXTENSIONS.contains(
             &p.extension()
                 .unwrap_or_default()
@@ -282,6 +299,14 @@ impl ToolFunction<()> for WriteTool {
                 ));
             }
         };
+        let p = Path::new(path);
+        let within_root =
+            is_within_root(&p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+        if !within_root {
+            return Ok(ToolResult::Err(
+                "Path does not appear to be within the current workspace or its root is non-resolvable".into(),
+            ));
+        }
         let content = match input["content"].as_str() {
             Some(c) => c,
             None => {
@@ -353,6 +378,14 @@ impl ToolFunction<()> for EditTool {
                 return Ok(ToolResult::Err("Missing required field 'path'".into()));
             }
         };
+        let p = Path::new(path);
+        let within_root =
+            is_within_root(&p).map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+        if !within_root {
+            return Ok(ToolResult::Err(
+                "Path does not appear to be within the current workspace or its root is non-resolvable".into(),
+            ));
+        }
         let old_str = match input["old_str"].as_str() {
             Some(s) => s,
             None => {
@@ -379,11 +412,19 @@ impl ToolFunction<()> for EditTool {
                 "`old_str` matched {occurrences} times in {path}; it must be unique"
             )));
         }
+        // Replace
         let updated = content.replacen(old_str, new_str, 1);
-        match fs::write(path, updated) {
-            Ok(_) => Ok(ToolResult::Ok(format!("Edited {path}"))),
-            Err(e) => Ok(ToolResult::Err(format!("Failed to write {path}: {e}"))),
-        }
+
+        // Atomic write — temp file in same dir so rename stays on same filesystem
+        let parent = p.parent().unwrap_or(Path::new("."));
+        let mut tmp = tempfile::NamedTempFile::new_in(parent)
+            .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+        tmp.write_all(updated.as_bytes())
+            .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+        tmp.persist(p)
+            .map_err(|e| AgentError::ToolCallError(e.to_string()))?;
+
+        Ok(ToolResult::Ok(format!("Edited {path}")))
     }
 }
 
@@ -402,18 +443,24 @@ impl ToolFunction<()> for ShellExecuteTool {
 
     fn input_schema(&self) -> Value {
         json!({
-            "type": "object",
-            "required": ["command"],
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "Shell command to execute (run via `sh -c`)."
-                },
-                "cwd": {
-                    "type": "string",
-                    "description": "Optional working directory for the command."
-                }
+          "type": "object",
+          "required": [
+            "command"
+          ],
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Shell command to execute (run via `sh -c`)."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Optional working directory for the command."
+            },
+            "timeout": {
+              "type": "number",
+              "description": "Command execution timeout in seconds (only integers allowed). Defaults to 60 seconds."
             }
+          }
         })
     }
 
@@ -450,7 +497,17 @@ impl ToolFunction<()> for ShellExecuteTool {
         if let Some(cwd) = input["cwd"].as_str() {
             cmd.current_dir(cwd);
         }
-        match cmd.output().await {
+        let tim = input["timeout"].as_u64().unwrap_or(60);
+        let res = tokio::time::timeout(Duration::from_secs(tim), cmd.output()).await;
+        let out = match res {
+            Ok(r) => r,
+            Err(e) => {
+                return Ok(ToolResult::Err(format!(
+                    "Error while executing {command} with timeout: {e}"
+                )));
+            }
+        };
+        match out {
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
