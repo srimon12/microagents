@@ -209,13 +209,29 @@ fn collect_files() -> Result<HashMap<String, Document>, Box<dyn std::error::Erro
     Ok(paths)
 }
 
-fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::error::Error>> {
-    let new_content = serde_json::to_string(&files)?;
+fn persist_file_changes(new_content: String) -> Result<(), Box<dyn std::error::Error>> {
     let root_path = root_or_cwd()?;
     let p = root_path.join(FILES_INDEX);
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent)?;
     }
+    if p.exists() {
+        let mut tmp_path = tempfile::NamedTempFile::new_in(&root_path)?;
+        tmp_path.write_all(new_content.as_bytes())?;
+        tmp_path.flush()?;
+        tmp_path.persist(&p)?;
+        return Ok(());
+    }
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&p, new_content)?;
+    Ok(())
+}
+
+fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::error::Error>> {
+    let root_path = root_or_cwd()?;
+    let p = root_path.join(FILES_INDEX);
     if p.exists() {
         let content = fs::read_to_string(&p)?;
         let fls: HashMap<String, Document> = serde_json::from_str(&content)?;
@@ -233,10 +249,6 @@ fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::err
                 }
             }
         }
-        let mut tmp_path = tempfile::NamedTempFile::new_in(&root_path)?;
-        tmp_path.write_all(new_content.as_bytes())?;
-        tmp_path.flush()?;
-        tmp_path.persist(&p)?;
 
         return Ok(Diff {
             created: created.iter().map(|s| s.to_string()).collect(),
@@ -244,7 +256,6 @@ fn diff_files(files: HashMap<String, Document>) -> Result<Diff, Box<dyn std::err
             modified: modified.iter().map(|s| s.to_string()).collect(),
         });
     }
-    fs::write(&p, new_content)?;
 
     Ok(Diff {
         created: files.keys().cloned().collect(),
@@ -436,7 +447,8 @@ pub async fn initialize_environment(
     if verbose {
         println!("Collected all the files in the current directory...");
     }
-    let diff = diff_files(files)?;
+    let files_content = serde_json::to_string(&files)?;
+    let diff = diff_files(files.clone())?;
 
     if verbose {
         println!(
@@ -459,6 +471,7 @@ pub async fn initialize_environment(
 
     delete_files(diff.to_delete())?;
     ingest_files(diff.to_reingest()).await?;
+    persist_file_changes(files_content)?;
 
     Ok((diff.created.len(), diff.modified.len(), diff.deleted.len()))
 }
