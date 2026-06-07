@@ -29,14 +29,14 @@ A minimal, modular AI-agent framework written in Rust. It provides a small core 
 
 ## Quick start
  
-> _Cargo installation coming soon!_
+> _Installation from crates.io coming soon!_
 
 Clone the repository and install from source:
 
 ```bash
 git clone https://github.com/AstraBert/microagents
 cd microagents
-cargo +nightly install -p microagents-cli
+cargo +nightly install --path microagents-cli
 ```
 
 This will install the `microag` binary.
@@ -45,6 +45,12 @@ Run the TUI with default settings:
 
 ```bash
 microag
+```
+
+Run in verbose mode to see codebase indexing progesssion:
+
+```bash
+microag --verbose
 ```
 
 Run the TUI customizing model/provider/storage backend:
@@ -136,8 +142,8 @@ struct MyTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for MyTool {
-    fn name(&self) -> String { "my_tool".into() }
-    fn description(&self) -> String { "Does something useful".into() }
+    fn name(&self) -> &'static str { "my_tool" }
+    fn description(&self) -> &'static str { "Does something useful" }
     fn input_schema(&self) -> Value {
         serde_json::json!({ "type": "object", "properties": {} })
     }

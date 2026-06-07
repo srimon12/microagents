@@ -13,7 +13,7 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use microagents_events::{
     AgentEventAny, AssistantResponseEvent, DeltaType, SessionInitEvent, SessionInitType,
-    SessionStopEvent, SkillLoadEvent, StreamDeltaEvent, ToolCallEvent, ToolResultEvent,
+    SessionStopEvent, SkillLoadEvent, StreamDeltaEvent, ToolCallEvent, ToolResultEvent, Usage,
     UserPromptSubmitEvent, types::ToolResult,
 };
 use microagents_storage::{
@@ -32,7 +32,10 @@ use ultrafast_models_sdk::{
 };
 
 use crate::{
-    common::{JsonResult, call_tool, check_api_key, convert_event_to_message, parse_json_fragment},
+    common::{
+        JsonResult, call_tool, check_api_key, convert_event_to_message, estimate_tokens,
+        parse_json_fragment,
+    },
     skills::{self, ensure_skill, find_skills, parse_skill},
     types::{Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction},
 };
@@ -538,6 +541,9 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
         session_id: Option<String>,
     ) -> Result<RunStream, AgentError> {
         let local_tools: HashMap<String, Arc<dyn ToolFunction<Ctx>>> = self.tools.clone();
+        let mut input_text = self.system.clone();
+        let mut completion_text = String::new();
+        let start_processing = Utc::now();
         let s: RunStream = Box::pin(stream! {
             let resolved_sid;
             let messages: Vec<Message> = if let Some(sid) = session_id {
@@ -602,6 +608,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 tool_calls: None,
                 tool_call_id: None,
             });
+            input_text += &prompt.clone();
             let turn_id = uuid::Uuid::new_v4().to_string();
             let user_prompt_submit = AgentEventAny::UserPromptSubmit(UserPromptSubmitEvent {
                 session_id: resolved_sid.clone(),
@@ -640,6 +647,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             for (_, delta) in deltas {
                                 if let Some(c) = delta.content {
                                     text += &c;
+                                    completion_text += &c;
                                     let ev = AgentEventAny::StreamDelta(StreamDeltaEvent {
                                         session_id: resolved_sid.clone(),
                                         turn_id: turn_id.clone(),
@@ -666,6 +674,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                             // Accumulate arguments regardless
                                             if let Some(args) = func.arguments {
                                                 tool_calls.entry(tc.index).and_modify(|v| v.2 += &args);
+                                                completion_text += &args;
                                             }
                                         }
                                     }
@@ -673,7 +682,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             }
                         },
                         Err(e) => {
-                            let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()), timestamp: Utc::now() });
+                            let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()), timestamp: Utc::now(), usage: Usage::default() });
                             match self.storage.update_session(stop_ev.clone()).await {
                                 Ok(_) => {},
                                 Err(e) => {
@@ -688,6 +697,9 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 }
 
                 if tool_calls.is_empty() {
+                    let latency = (Utc::now() - start_processing).num_milliseconds();
+                    let input_tokens = estimate_tokens(&input_text).unwrap_or_default();
+                    let output_tokens = estimate_tokens(&completion_text).unwrap_or_default();
                     let ev = AgentEventAny::AssistantResponse(AssistantResponseEvent {
                         session_id: resolved_sid.clone(),
                         turn_id: turn_id.clone(),
@@ -701,6 +713,13 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                         result: Some(text),
                         error: None,
                         timestamp: Utc::now(),
+                        usage: Usage {
+                            latency,
+                            output_chars: completion_text.len(),
+                            input_chars: input_text.len(),
+                            estimated_output_tokens: output_tokens,
+                            estimated_input_tokens: input_tokens,
+                        }
                     });
                     match self.storage.update_session(ev.clone()).await {
                         Ok(_) => {},
@@ -814,6 +833,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                 },
                                 _ => unreachable!("ToolResult should not reach this branch")
                             };
+                            input_text += &content;
                             tool_messages.push(Message { role: Role::Tool, content, name: None, tool_calls: None, tool_call_id: Some(tid) });
                         }
                         Ok(Err(e)) => {

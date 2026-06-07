@@ -36,6 +36,9 @@ pub enum AgentError {
     /// Converting an event to a chat message failed.
     #[error("Conversion error from agent event to message")]
     EventConversionError,
+    /// Tokenizer could not be loaded
+    #[error("Tokenizer could not be loaded: {0}")]
+    TokenizerLoadingError(String),
 }
 
 /// A single item yielded by a [`GenerationStream`].
