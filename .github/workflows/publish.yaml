@@ -1,14 +1,17 @@
 name: Publish to crates.io
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
-      - 'microagents-events@*'
-      - 'microagents-storage@*'
-      - 'microagents-core@*'
-      - 'microagents-cli@*'
-      - '[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - "microagents-events@*"
+      - "microagents-storage@*"
+      - "microagents-core@*"
+      - "microagents-cli@*"
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 env:
   CARGO_TERM_COLOR: always
@@ -59,7 +62,9 @@ jobs:
       max-parallel: 1
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -92,7 +97,8 @@ jobs:
         if: ${{ matrix.package != 'microagents-cli' }}
         run: |
           echo "Waiting for crates.io to index ${{ matrix.package }}..."
-          sleep 30
+          TAG_VERSION="${{ needs.resolve.outputs.version }}"
+          ./scripts/poll-for-crates.sh ${{ matrix.package }} $TAG_VERSION
 
       - name: Create GitHub Release
         if: ${{ matrix.package == 'microagents-cli' || fromJson(needs.resolve.outputs.packages)[0] != 'microagents-events' }}
