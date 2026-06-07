@@ -608,7 +608,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                 tool_calls: None,
                 tool_call_id: None,
             });
-            input_text += &prompt.clone();
+            input_text += &prompt;
             let turn_id = uuid::Uuid::new_v4().to_string();
             let user_prompt_submit = AgentEventAny::UserPromptSubmit(UserPromptSubmitEvent {
                 session_id: resolved_sid.clone(),
@@ -682,7 +682,11 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             }
                         },
                         Err(e) => {
-                            let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()), timestamp: Utc::now(), usage: Usage::default() });
+                            let latency = (Utc::now() - start_processing).num_milliseconds();
+                            let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()), timestamp: Utc::now(), usage: Usage {
+                                latency,
+                                ..Default::default()
+                            }});
                             match self.storage.update_session(stop_ev.clone()).await {
                                 Ok(_) => {},
                                 Err(e) => {
