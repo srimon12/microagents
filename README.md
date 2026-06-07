@@ -47,7 +47,7 @@ Run the TUI with default settings:
 microag
 ```
 
-Run in verbose mode to see codebase indexing progession:
+Run in verbose mode to see codebase indexing progression:
 
 ```bash
 microag --verbose

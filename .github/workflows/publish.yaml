@@ -1,0 +1,109 @@
+name: Publish to crates.io
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "microagents-events@*"
+      - "microagents-storage@*"
+      - "microagents-core@*"
+      - "microagents-cli@*"
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  resolve:
+    name: Resolve tag to package(s)
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.resolve.outputs.packages }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve tag
+        id: resolve
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG"
+
+          # Prefixed tag: single package
+          if [[ "$TAG" == microagents-events@* ]]; then
+            VERSION="${TAG#microagents-events@}"
+            PACKAGES='["microagents-events"]'
+          elif [[ "$TAG" == microagents-storage@* ]]; then
+            VERSION="${TAG#microagents-storage@}"
+            PACKAGES='["microagents-storage"]'
+          elif [[ "$TAG" == microagents-core@* ]]; then
+            VERSION="${TAG#microagents-core@}"
+            PACKAGES='["microagents-core"]'
+          elif [[ "$TAG" == microagents-cli@* ]]; then
+            VERSION="${TAG#microagents-cli@}"
+            PACKAGES='["microagents-cli"]'
+          # Non-prefixed tag: publish all in dependency order
+          else
+            VERSION="${TAG#v}"
+            PACKAGES='["microagents-events","microagents-storage","microagents-core","microagents-cli"]'
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish ${{ matrix.package }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ${{ fromJson(needs.resolve.outputs.packages) }}
+      max-parallel: 1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-publish-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Verify tag version matches Cargo.toml
+        run: |
+          TOML_VERSION=$(grep '^version' ${{ matrix.package }}/Cargo.toml | head -1 | sed 's/.*= *"\(.*\)".*/\1/')
+          TAG_VERSION="${{ needs.resolve.outputs.version }}"
+          if [ "$TOML_VERSION" != "$TAG_VERSION" ]; then
+            echo "Version mismatch: tag says $TAG_VERSION, ${{ matrix.package }}/Cargo.toml says $TOML_VERSION"
+            exit 1
+          fi
+
+      - name: Publish ${{ matrix.package }}
+        run: |
+          cargo publish -p ${{ matrix.package }} --token ${{ secrets.CARGO_TOKEN }}
+
+      - name: Wait for crates.io indexing
+        if: ${{ matrix.package != 'microagents-cli' }}
+        run: |
+          echo "Waiting for crates.io to index ${{ matrix.package }}..."
+          TAG_VERSION="${{ needs.resolve.outputs.version }}"
+          ./scripts/poll-for-crates.sh ${{ matrix.package }} $TAG_VERSION
+
+      - name: Create GitHub Release
+        if: ${{ matrix.package == 'microagents-cli' || fromJson(needs.resolve.outputs.packages)[0] != 'microagents-events' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
