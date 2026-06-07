@@ -72,6 +72,15 @@ impl From<DeltaType> for Value {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Default)]
+pub struct Usage {
+    pub latency: i64,
+    pub input_chars: usize,
+    pub estimated_input_tokens: usize,
+    pub output_chars: usize,
+    pub estimated_output_tokens: usize,
+}
+
 /// Event emitted when a session is initialized.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInitEvent {
@@ -92,6 +101,7 @@ pub struct SessionStopEvent {
     pub result: Option<String>,
     pub error: Option<String>,
     pub timestamp: DateTime<Utc>,
+    pub usage: Usage,
 }
 
 /// Event emitted when the user submits a prompt.
@@ -188,6 +198,7 @@ impl AgentEvent for SessionStopEvent {
                 "timestamp".into(),
                 serde_json::to_value(self.timestamp).unwrap(),
             )
+            .add_param("usage".into(), serde_json::to_value(self.usage).unwrap())
     }
 
     fn session_id(&self) -> String {
@@ -460,6 +471,15 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                         .map_err(|_| AgentEventError::InvalidFieldType("timestamp".to_string()))?;
                     tms
                 },
+                usage: {
+                    let raw = value
+                        .params
+                        .get("usage")
+                        .ok_or_else(|| AgentEventError::MissingField("usage".to_string()))?;
+                    let usg: Usage = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("usage".to_string()))?;
+                    usg
+                },
             })),
             "user.prompt.submit" => Ok(Self::UserPromptSubmit(UserPromptSubmitEvent {
                 session_id,
@@ -688,12 +708,20 @@ mod tests {
             result: Some("done".into()),
             error: None,
             timestamp: Utc::now(),
+            usage: Usage::default(),
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "session.stop");
         assert_eq!(rpc.params.get("success"), Some(&Value::from(true)));
         assert_eq!(rpc.params.get("result"), Some(&Value::from("done")));
         assert_eq!(rpc.params.get("error"), Some(&Value::Null));
+        assert_eq!(
+            rpc.params.get("usage"),
+            Some(
+                &serde_json::to_value(Usage::default())
+                    .expect("Should be able to convert to value")
+            )
+        );
     }
 
     #[test]
@@ -868,10 +896,14 @@ mod tests {
             .add_param("timestamp".into(), {
                 let tms = Utc::now();
                 serde_json::to_value(tms).expect("Should convert to value")
+            })
+            .add_param("usage".into(), {
+                let usg = Usage::default();
+                serde_json::to_value(usg).expect("Should convert to value")
             });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(
-            matches!(any, AgentEventAny::SessionStop(ref e) if e.success && e.result == Some("done".into()) && e.error.is_none())
+            matches!(any, AgentEventAny::SessionStop(ref e) if e.success && e.result == Some("done".into()) && e.error.is_none() && e.usage.latency == 0)
         );
     }
 

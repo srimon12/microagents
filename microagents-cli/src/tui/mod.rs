@@ -177,8 +177,11 @@ impl App {
                     self.push(Msg::Error(err));
                 }
                 self.push(Msg::Session(format!(
-                    "session stopped • {}",
-                    if s.success { "ok" } else { "failed" }
+                    "session stopped • {} • {:?}ms • {:?} est. input tokens • {:?} est. output tokens",
+                    if s.success { "ok" } else { "failed" },
+                    s.usage.latency,
+                    s.usage.estimated_input_tokens,
+                    s.usage.estimated_output_tokens,
                 )));
             }
             AgentEventAny::UserPromptSubmit(m) => {

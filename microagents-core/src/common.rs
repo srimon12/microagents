@@ -1,4 +1,6 @@
 use std::sync::Arc;
+#[cfg(feature = "token_estimation")]
+use std::sync::OnceLock;
 
 use microagents_events::{AgentEventAny, types::ToolResult};
 use serde_json::Value;
@@ -8,6 +10,14 @@ use ultrafast_models_sdk::{
 };
 
 use crate::types::{AgentError, ToolExecutionContext, ToolFunction};
+
+#[cfg(feature = "token_estimation")]
+static TOKENIZER: OnceLock<Result<tokie::Tokenizer, tokie::HubError>> = OnceLock::new();
+
+#[cfg(feature = "token_estimation")]
+fn tokenizer() -> &'static Result<tokie::Tokenizer, tokie::HubError> {
+    TOKENIZER.get_or_init(|| tokie::Tokenizer::from_pretrained("gpt2"))
+}
 
 /// Verify that an environment variable containing an API key is set.
 ///
@@ -122,13 +132,30 @@ pub async fn call_tool<Ctx: Send + Sync + 'static>(
     Ok(result)
 }
 
+/// Estimate the number of tokens in a given text using the GPT-2 tokenizer.
+/// Requires the `token_estimation` feature. Returns 0 if the feature is disabled.
+pub fn estimate_tokens(_text: &str) -> Result<usize, AgentError> {
+    #[cfg(feature = "token_estimation")]
+    {
+        Ok(tokenizer()
+            .as_ref()
+            .map_err(|e| AgentError::TokenizerLoadingError(e.to_string()))?
+            .count_tokens(_text))
+    }
+    #[cfg(not(feature = "token_estimation"))]
+    {
+        Ok(0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::Utc;
     use microagents_events::{
         AssistantResponseEvent, SessionInitEvent, SessionInitType, SessionStopEvent,
-        SkillLoadEvent, StreamDeltaEvent, ToolCallEvent, ToolResultEvent, UserPromptSubmitEvent,
+        SkillLoadEvent, StreamDeltaEvent, ToolCallEvent, ToolResultEvent, Usage,
+        UserPromptSubmitEvent,
         types::{FunctionCall as EventFunctionCall, ToolCall as EventToolCall},
     };
 
@@ -238,6 +265,7 @@ mod tests {
                 result: None,
                 error: None,
                 timestamp: Utc::now(),
+                usage: Usage::default()
             }))
             .is_none()
         );
@@ -357,5 +385,19 @@ mod tests {
             AgentError::ToolCallError(_) => {}
             other => panic!("expected ToolCallError, got {:?}", other),
         }
+    }
+
+    #[test]
+    #[cfg(feature = "token_estimation")]
+    fn test_estimate_tokens() {
+        let count = estimate_tokens("hello world").expect("Should be able to estimate tokens");
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    #[cfg(not(feature = "token_estimation"))]
+    fn test_estimate_tokens() {
+        let count = estimate_tokens("hello world").expect("Should be able to estimate tokens");
+        assert_eq!(count, 0);
     }
 }

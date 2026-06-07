@@ -118,7 +118,9 @@ impl AgentStorage for JsonlAgentStorage {
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use microagents_events::{AssistantResponseEvent, SessionStopEvent, UserPromptSubmitEvent};
+    use microagents_events::{
+        AssistantResponseEvent, SessionStopEvent, Usage, UserPromptSubmitEvent,
+    };
 
     use super::*;
 
@@ -201,6 +203,7 @@ mod tests {
                 error: None,
                 success: true,
                 timestamp: Utc::now(),
+                usage: Usage::default(),
             }))
             .await
             .expect("Should be able to update memory");

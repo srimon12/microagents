@@ -28,27 +28,47 @@ A minimal, modular AI-agent framework written in Rust. It provides a small core 
 - **Embedded TUI for `microagents-cli`** — `ratatui`-based chat interface with streaming deltas, tool-call visualization, scrolling history, and session resume.
 
 ## Quick start
+ 
+> _Installation from crates.io coming soon!_
 
-Build the CLI:
+Clone the repository and install from source:
 
 ```bash
-cargo build --release -p microagents-cli
+git clone https://github.com/AstraBert/microagents
+cd microagents
+cargo +nightly install --path microagents-cli
 ```
 
-Run the TUI:
+This will install the `microag` binary.
+
+Run the TUI with default settings:
 
 ```bash
-# Uses OpenRouter by default (set OPENROUTER_API_KEY)
-./target/release/microag
+microag
+```
 
-# Use a different provider
-./target/release/microag --provider openai --model gpt-5.5
+Run in verbose mode to see codebase indexing progession:
 
-# Resume a previous session
-./target/release/microag --session-id <uuid>
+```bash
+microag --verbose
+```
 
-# Persist sessions to SQLite instead of JSONL
-./target/release/microag --storage sqlite
+Run the TUI customizing model/provider/storage backend:
+
+```bash
+microag --provider ollama --model gemma4:latest --storage sqlite
+```
+
+Run the TUI resuming a previous session:
+
+```bash
+microag --session-id <session-id>
+```
+
+Run in headless mode, printing JSON-RPC-serialized events to the console, using the `-p/--prompt` flag:
+
+```bash
+microag -p 'Where is AgentStorage defined and which storage backends implement it?'
 ```
 
 ## Architecture overview
@@ -92,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .storage(AgentStorageChoice::Sqlite)
         .await?
         .find_skills()?
-        .build();
+        .build()?;
 
     let mut stream = agent.run("Hello!".to_string(), None).await?;
 
@@ -122,8 +142,8 @@ struct MyTool;
 
 #[async_trait::async_trait]
 impl ToolFunction<()> for MyTool {
-    fn name(&self) -> String { "my_tool".into() }
-    fn description(&self) -> String { "Does something useful".into() }
+    fn name(&self) -> &'static str { "my_tool" }
+    fn description(&self) -> &'static str { "Does something useful" }
     fn input_schema(&self) -> Value {
         serde_json::json!({ "type": "object", "properties": {} })
     }
@@ -135,7 +155,7 @@ impl ToolFunction<()> for MyTool {
 // Then add it when building the agent:
 // let agent = MicroAgentBuilder::new(...)
 //     .add_tool(Arc::new(MyTool))?
-//     .build();
+//     .build()?;
 ```
 
 
