@@ -233,7 +233,8 @@ impl ToolFunction<()> for ReadTool {
             "pages": {
               "type": "array",
               "items": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 0
               },
               "description": "List of page numbers to read (0-based). Only applies to unstructured documents (PDFs, Office docs)."
             },
@@ -307,13 +308,22 @@ impl ToolFunction<()> for ReadTool {
             Ok(content) => {
                 let text = content;
 
-                let offset = input["offset"].as_u64().map(|o| o as usize).unwrap_or(0);
+                let offset_chars = input["offset"].as_u64().map(|o| o as usize).unwrap_or(0);
+                let max_chars = input["max_length"].as_u64().map(|m| m as usize);
 
-                // Clamp offset to avoid panic if offset > text.len()
-                let text = &text[offset.min(text.len())..];
+                let start = text
+                    .char_indices()
+                    .nth(offset_chars)
+                    .map(|(i, _)| i)
+                    .unwrap_or(text.len());
+                let text = &text[start..];
 
-                let text = if let Some(max) = input["max_length"].as_u64() {
-                    let end = (max as usize).min(text.len()); // clamp to avoid panic
+                let text = if let Some(max) = max_chars {
+                    let end = text
+                        .char_indices()
+                        .nth(max)
+                        .map(|(i, _)| i)
+                        .unwrap_or(text.len());
                     &text[..end]
                 } else {
                     text

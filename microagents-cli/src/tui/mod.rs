@@ -531,7 +531,7 @@ fn block_lines(block: &Msg) -> Vec<Line<'static>> {
         Msg::ToolResult(r) => match r {
             ToolResult::Ok(s) => {
                 let actual_res = if s.len() > 200 {
-                    s[..s.len().min(200)].to_string() + "..."
+                    s[..s.floor_char_boundary(200)].to_string() + "..."
                 } else {
                     s.to_string()
                 };
