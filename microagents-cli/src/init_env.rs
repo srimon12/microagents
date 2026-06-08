@@ -13,9 +13,10 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::SystemTime;
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, Semaphore, mpsc};
 use tokio::task::JoinSet;
 
 use crate::processing::{chunk, embed};
@@ -32,8 +33,8 @@ pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
     ".csv", ".tsv",
 ];
 static EMBEDDING_MODEL: OnceLock<StaticModel> = OnceLock::new();
-static PARSER: OnceLock<LiteParse> = OnceLock::new();
 static EDGE_CONFIG: OnceLock<EdgeConfig> = OnceLock::new();
+static PARSER_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn embedding_model() -> &'static StaticModel {
     EMBEDDING_MODEL.get_or_init(|| {
@@ -80,22 +81,20 @@ fn edge_config() -> &'static EdgeConfig {
     })
 }
 
-pub fn parser() -> &'static LiteParse {
-    PARSER.get_or_init(|| {
-        LiteParse::new(LiteParseConfig {
-            ocr_enabled: cfg!(not(target_os = "windows")),
-            ocr_language: "eng".into(),
-            ocr_server_url: None,
-            tessdata_path: None,
-            max_pages: 500,
-            password: None,
-            target_pages: None,
-            dpi: 180_f32,
-            output_format: liteparse::OutputFormat::Text,
-            preserve_very_small_text: true,
-            quiet: true,
-            num_workers: 4,
-        })
+pub fn parser() -> LiteParse {
+    LiteParse::new(LiteParseConfig {
+        ocr_enabled: false,
+        ocr_language: "eng".into(),
+        ocr_server_url: None,
+        tessdata_path: None,
+        max_pages: 500,
+        password: None,
+        target_pages: None,
+        dpi: 120_f32,
+        output_format: liteparse::OutputFormat::Text,
+        preserve_very_small_text: false,
+        quiet: true,
+        num_workers: 1,
     })
 }
 
@@ -325,6 +324,7 @@ async fn ingest_one(abs_path: &PathBuf) -> Result<Vec<EmbeddingWithPayload>, Str
         .unwrap_or_default();
     let content = if SUPPORTED_LIT_EXTENSIONS.contains(&ext.as_str()) {
         let abs_str = abs_path.to_string_lossy().to_string();
+        let _guard = PARSER_MUTEX.get_or_init(|| Mutex::new(())).lock().await;
         match parser().parse(&abs_str).await {
             Err(_) => {
                 return Err(abs_path.to_string_lossy().to_string());
@@ -332,7 +332,7 @@ async fn ingest_one(abs_path: &PathBuf) -> Result<Vec<EmbeddingWithPayload>, Str
             Ok(p) => p.text,
         }
     } else {
-        match fs::read_to_string(abs_path) {
+        match tokio::fs::read_to_string(abs_path).await {
             Err(_) => {
                 return Err(abs_path.to_string_lossy().to_string());
             }
@@ -370,41 +370,83 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
     let mut failed = HashSet::new();
     let mut join_set = JoinSet::new();
     let semaphore = Arc::new(Semaphore::new(INGESTION_CONCURRENCY));
+
+    // Channel for streaming embeddings to the upload worker as soon as each file finishes.
+    let (tx, mut rx) = mpsc::channel::<Vec<EmbeddingWithPayload>>(INGESTION_CONCURRENCY);
+    let embeddings_failed = Arc::new(AtomicUsize::new(0));
+    let embeddings_failed_clone = embeddings_failed.clone();
+
+    // Spawn a single task that eagerly uploads embeddings as they arrive.
+    let upload_handle = tokio::task::spawn_blocking(move || {
+        while let Some(batch) = rx.blocking_recv() {
+            if let Err(e) = upload_embeddings(batch) {
+                embeddings_failed_clone.fetch_add(1, Ordering::Relaxed);
+                eprintln!("✗ Failed to upload embeddings: {e}");
+            }
+        }
+    });
+
     for fl in to_ingest {
         let abs_path = root_path.join(&fl);
         let permit = semaphore.clone().acquire_owned().await?;
+        let tx = tx.clone();
         join_set.spawn(async move {
             let _permit = permit;
-            ingest_one(&abs_path).await
+            match ingest_one(&abs_path).await {
+                Ok(v) => {
+                    if !v.is_empty() && tx.send(v).await.is_err() {
+                        return Err("Upload channel closed early".into());
+                    }
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+            Ok(())
         });
     }
+
+    // Drop the original sender so the channel closes once all tasks are done.
+    drop(tx);
 
     let mut panicked = 0;
     while let Some(result) = join_set.join_next().await {
         match result {
-            Ok(Ok(v)) => {
-                upload_embeddings(v)?;
-            }
             Ok(Err(e)) => {
                 failed.insert(e);
             }
             Err(e) => {
                 eprintln!("✗ Error while executing the ingestion function: {e}");
                 panicked += 1;
-            } // JoinError
+            }
+            Ok(Ok(())) => {}
         }
     }
 
+    // Wait for the upload worker to finish draining the channel.
+    if let Err(e) = upload_handle.await {
+        return Err(format!("Upload worker panicked: {e}").into());
+    }
+
+    if embeddings_failed.load(Ordering::Relaxed) != 0 {
+        return Err(format!(
+            "Failed to upload {:?} embeddings batches",
+            embeddings_failed
+        )
+        .into());
+    }
+
     if panicked != 0 {
-        eprintln!("Panicked while ingesting {:?} files", panicked);
+        return Err(format!("Panicked while ingesting {:?} files", panicked).into());
     }
 
     if !failed.is_empty() {
-        eprintln!(
-            "Warning: failed to ingest {} file(s): {:?}",
+        return Err(format!(
+            "Error: failed to ingest {} file(s): {:?}",
             failed.len(),
             failed
-        );
+        )
+        .into());
     }
 
     Ok(())
@@ -438,7 +480,6 @@ pub async fn initialize_environment(
 
     let _ = embedding_model();
     let _ = edge_config();
-    let _ = parser();
 
     let files = collect_files()?;
     if verbose {
