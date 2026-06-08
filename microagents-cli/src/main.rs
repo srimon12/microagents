@@ -46,11 +46,12 @@ struct Args {
     #[arg(long = "session-id", value_name = "ID")]
     session_id: Option<String>,
 
-    /// Prompt to run in headless mode
+    /// Prompt to run in headless mode.
     #[arg(long, short, default_value = None)]
     prompt: Option<String>,
 
-    /// Whether to print some debug/info messages when initializing the environment
+    /// Whether to print some debug/info messages when initializing the environment.
+    /// This option has an effect in headless mode only.
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
 }
@@ -112,8 +113,8 @@ async fn build_agent(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    initialize_environment(args.verbose).await?;
     if let Some(p) = args.prompt {
+        initialize_environment(args.verbose).await?;
         let agent = build_agent(args.provider, args.model, args.storage, args.skill).await?;
         let mut stream = agent
             .run(p, args.session_id)
@@ -138,9 +139,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
-    if args.verbose {
-        println!("Launching TUI...");
-    }
+    // when launching the TUI, you want the user
+    // to know that some processing is taking place
+    // and that things did not just randomly freeze
+    initialize_environment(true).await?;
+    println!("Launching TUI...");
     let initial_session = args.session_id.clone();
     let load_history_storage = args.storage.clone();
     tui::run_with_session(
