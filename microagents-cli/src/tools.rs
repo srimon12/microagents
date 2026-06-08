@@ -15,12 +15,11 @@ use tokio::sync::Mutex;
 
 use tokio::process::Command;
 
-use crate::init_env::{SUPPORTED_LIT_EXTENSIONS, parser};
+use crate::init_env::{PARSER_MUTEX, SUPPORTED_LIT_EXTENSIONS, parser};
 use crate::processing::embed_query;
 use crate::search::search as vector_search;
 
 static DANGEROUS: OnceLock<Regex> = OnceLock::new();
-static PARSER_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn dangerous_regex() -> &'static Regex {
     DANGEROUS.get_or_init(|| {

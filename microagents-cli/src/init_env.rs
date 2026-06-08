@@ -34,7 +34,7 @@ pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
 ];
 static EMBEDDING_MODEL: OnceLock<StaticModel> = OnceLock::new();
 static EDGE_CONFIG: OnceLock<EdgeConfig> = OnceLock::new();
-static PARSER_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+pub static PARSER_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn embedding_model() -> &'static StaticModel {
     EMBEDDING_MODEL.get_or_init(|| {
