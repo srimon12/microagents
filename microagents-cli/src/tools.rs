@@ -11,6 +11,7 @@ use std::path::Path;
 use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 use tokio::process::Command;
 
@@ -19,6 +20,7 @@ use crate::processing::embed_query;
 use crate::search::search as vector_search;
 
 static DANGEROUS: OnceLock<Regex> = OnceLock::new();
+static PARSER_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn dangerous_regex() -> &'static Regex {
     DANGEROUS.get_or_init(|| {
@@ -262,6 +264,7 @@ impl ToolFunction<()> for ReadTool {
                 .unwrap_or_default()
                 .as_str(),
         ) {
+            let _guard = PARSER_MUTEX.get_or_init(|| Mutex::new(())).lock().await;
             let result = parser().parse(path).await;
             match result {
                 Ok(content) => return Ok(ToolResult::Ok(content.text)),

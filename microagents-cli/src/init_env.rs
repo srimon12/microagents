@@ -27,10 +27,10 @@ pub const VECTORS_NAME: &str = "dense_text";
 pub const SPARSE_VECTORS_NAME: &str = "sparse_text";
 const VECTORS_SIZE: usize = 256;
 const INGESTION_CONCURRENCY: usize = 10;
+// OCR is disabled, images are not supported
 pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
-    ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp", ".svg", ".doc", ".docx",
-    ".docm", ".odt", ".rtf", ".ppt", ".pptx", ".pptm", ".odp", ".xls", ".xlsx", ".xlsm", ".ods",
-    ".csv", ".tsv",
+    ".pdf", ".doc", ".docx", ".docm", ".odt", ".rtf", ".ppt", ".pptx", ".pptm", ".odp", ".xls",
+    ".xlsx", ".xlsm", ".ods", ".csv", ".tsv",
 ];
 static EMBEDDING_MODEL: OnceLock<StaticModel> = OnceLock::new();
 static EDGE_CONFIG: OnceLock<EdgeConfig> = OnceLock::new();
