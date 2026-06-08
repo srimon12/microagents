@@ -27,6 +27,10 @@ A minimal, modular AI-agent framework written in Rust. It provides a small core 
   - `search` — semantic + sparse (BM25) hybrid search over the workspace, powered by `qdrant-edge`, `model2vec-rs` and `astchunk`.
 - **Embedded TUI for `microagents-cli`** — `ratatui`-based chat interface with streaming deltas, tool-call visualization, scrolling history, and session resume.
 
+## Compatibility
+
+Rust 1.91.1+ is necessary.
+
 ## Quick start
  
 > _Installation from crates.io coming soon!_

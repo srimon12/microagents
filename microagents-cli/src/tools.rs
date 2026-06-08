@@ -223,14 +223,33 @@ impl ToolFunction<()> for ReadTool {
 
     fn input_schema(&self) -> Value {
         json!({
-            "type": "object",
-            "required": ["path"],
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Path to the file to read."
-                }
+          "type": "object",
+          "required": ["path"],
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path to the file to read."
+            },
+            "pages": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "description": "List of page numbers to read (0-based). Only applies to unstructured documents (PDFs, Office docs)."
+            },
+            "offset": {
+              "type": "integer",
+              "description": "Number of characters to skip from the start of the file. Only applies to text-based files.",
+              "minimum": 0,
+              "default": 0
+            },
+            "max_length": {
+              "type": "integer",
+              "description": "Maximum number of characters to read. Only applies to text-based files.",
+              "minimum": 1
             }
+          }
         })
     }
 
@@ -266,12 +285,52 @@ impl ToolFunction<()> for ReadTool {
             let _guard = PARSER_MUTEX.get_or_init(|| Mutex::new(())).lock().await;
             let result = parser().parse(path).await;
             match result {
-                Ok(content) => return Ok(ToolResult::Ok(content.text)),
+                Ok(content) => {
+                    if let Some(pgs) = input["pages"].as_array() {
+                        let lit_pages = content.pages;
+                        let mut text = String::new();
+                        for pg in pgs {
+                            if let Some(v) = pg.as_u64()
+                                && let Some(p) = lit_pages.get(v as usize)
+                            {
+                                text += &format!("Page {v}\n\n{}\n\n---\n\n", p.text);
+                            }
+                        }
+                        return Ok(ToolResult::Ok(text));
+                    } else {
+                        return Ok(ToolResult::Ok(content.text));
+                    }
+                }
                 Err(e) => return Ok(ToolResult::Err(format!("Failed to read {path}: {e}"))),
             }
         }
-        match fs::read_to_string(path) {
-            Ok(content) => Ok(ToolResult::Ok(content)),
+        match tokio::fs::read_to_string(path).await {
+            Ok(content) => {
+                let text = content;
+
+                let offset_chars = input["offset"].as_u64().map(|o| o as usize).unwrap_or(0);
+                let max_chars = input["max_length"].as_u64().map(|m| m as usize);
+
+                let start = text
+                    .char_indices()
+                    .nth(offset_chars)
+                    .map(|(i, _)| i)
+                    .unwrap_or(text.len());
+                let text = &text[start..];
+
+                let text = if let Some(max) = max_chars {
+                    let end = text
+                        .char_indices()
+                        .nth(max)
+                        .map(|(i, _)| i)
+                        .unwrap_or(text.len());
+                    &text[..end]
+                } else {
+                    text
+                };
+
+                Ok(ToolResult::Ok(text.to_string()))
+            }
             Err(e) => Ok(ToolResult::Err(format!("Failed to read {path}: {e}"))),
         }
     }
