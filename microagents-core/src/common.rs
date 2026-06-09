@@ -19,10 +19,10 @@ fn tokenizer() -> &'static Result<tokie::Tokenizer, tokie::HubError> {
     TOKENIZER.get_or_init(|| tokie::Tokenizer::from_pretrained("gpt2"))
 }
 
-/// Verify that an environment variable containing an API key is set.
+/// Verify that an environment variable is set.
 ///
 /// Returns `Ok(())` if the variable exists, otherwise propagates the [`VarError`].
-pub fn check_api_key(api_key: &str) -> Result<(), std::env::VarError> {
+pub fn check_env_var(api_key: &str) -> Result<(), std::env::VarError> {
     let _ = std::env::var(api_key)?;
     Ok(())
 }

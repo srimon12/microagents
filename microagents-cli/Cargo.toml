@@ -1,6 +1,6 @@
 [package]
 name = "microagents-cli"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
@@ -12,7 +12,7 @@ keywords = ["ai", "agents", "cli", "tui", "rust"]
 async-trait = "0.1.89"
 futures-core = "0.3.32"
 futures-util = "0.3.32"
-microagents-core = { path = "../microagents-core", version = "0.1.0" }
+microagents-core = { path = "../microagents-core", version = "0.2.0" }
 microagents-events = { path = "../microagents-events", version = "0.1.0" }
 microagents-storage = { path = "../microagents-storage", version = "0.1.0" }
 model2vec-rs = "0.2.1"
