@@ -89,7 +89,7 @@ async fn build_agent(
     let prov = SupportedProvider::from_str(&provider.clone().unwrap_or("openrouter".to_string()))
         .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
     let base_builder = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()))
-        .model(model.unwrap_or(prov.default_model().to_string()))
+        .model(model.unwrap_or(prov.default_model()?.to_string()))
         .provider(provider.unwrap_or("openrouter".into()))?
         .storage(st)
         .await?

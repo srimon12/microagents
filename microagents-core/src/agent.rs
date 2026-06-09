@@ -33,7 +33,7 @@ use ultrafast_models_sdk::{
 
 use crate::{
     common::{
-        JsonResult, call_tool, check_api_key, convert_event_to_message, estimate_tokens,
+        JsonResult, call_tool, check_env_var, convert_event_to_message, estimate_tokens,
         parse_json_fragment,
     },
     skills::{self, ensure_skill, find_skills, parse_skill},
@@ -87,12 +87,14 @@ const MAX_CONCURRENT_TOOL_CALLS: usize = 10;
 
 /// Supported LLM providers.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
+#[non_exhaustive]
 pub enum SupportedProvider {
     #[default]
     OpenAI,
     OpenRouter,
     Ollama,
     Groq,
+    OpenAICompatible,
 }
 
 impl FromStr for SupportedProvider {
@@ -103,6 +105,7 @@ impl FromStr for SupportedProvider {
             "openrouter" => Ok(Self::OpenRouter),
             "ollama" => Ok(Self::Ollama),
             "groq" => Ok(Self::Groq),
+            "openai-compatible" => Ok(Self::OpenAICompatible),
             _ => Err(MicroAgentBuilderError::ProviderNotSupported(s.into())),
         }
     }
@@ -115,6 +118,7 @@ impl fmt::Display for SupportedProvider {
             Self::Groq => "groq",
             Self::Ollama => "ollama",
             Self::OpenAI => "openai",
+            Self::OpenAICompatible => "openai-compatible",
         };
         write!(f, "{}", s)
     }
@@ -122,19 +126,24 @@ impl fmt::Display for SupportedProvider {
 
 impl SupportedProvider {
     /// Return the default model identifier for this provider.
-    pub fn default_model(&self) -> &'static str {
+    pub fn default_model(&self) -> Result<&'static str, MicroAgentBuilderError> {
         match self {
             // GPT-5.5 is the current default ChatGPT model as of May 2026
-            SupportedProvider::OpenAI => "gpt-5.5",
+            SupportedProvider::OpenAI => Ok("gpt-5.5"),
 
             // llama3.2 is the most widely tested, hardware-friendly default
-            SupportedProvider::Ollama => "llama3.2",
+            SupportedProvider::Ollama => Ok("llama3.2"),
 
             // llama-3.3-70b-versatile is Groq's documented default recommendation
-            SupportedProvider::Groq => "llama-3.3-70b-versatile",
+            SupportedProvider::Groq => Ok("llama-3.3-70b-versatile"),
 
             // Claude Opus 4.7 by Anthropic is cuttig-edge in the models market
-            SupportedProvider::OpenRouter => "anthropic/claude-opus-4.7",
+            SupportedProvider::OpenRouter => Ok("anthropic/claude-opus-4.7"),
+
+            // The rest should specify a model
+            SupportedProvider::OpenAICompatible => Err(
+                MicroAgentBuilderError::ModelNotSpecifiedError("openai-compatible".into()),
+            ),
         }
     }
 }
@@ -153,7 +162,9 @@ pub enum MicroAgentBuilderError {
     #[error("Storage could not be loaded: {0}")]
     StorageLoadError(String),
     #[error("API key not found for provider {0}")]
-    APIKeyNotFoundError(String),
+    EnvVarNotFoundError(String),
+    #[error("Provider {0} should specify a model")]
+    ModelNotSpecifiedError(String),
 }
 
 /// Newtype wrapper so that [`UltrafastClient`] can implement [`Debug`].
@@ -304,11 +315,11 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     }
 
     /// Choose the effective model: user-supplied or provider default.
-    fn resolve_model(&self) -> String {
+    fn resolve_model(&self) -> Result<String, MicroAgentBuilderError> {
         if self.model.is_empty() {
-            return self.provider.default_model().into();
+            return self.provider.default_model().map(|m| m.to_string());
         }
-        self.model.clone()
+        Ok(self.model.clone())
     }
 
     /// Assemble the full system prompt from the base prompt, model info,
@@ -359,20 +370,28 @@ You are {} provided by {}
     /// Fails early if a required API key is missing for the chosen provider.
     #[must_use = "The builder needs to call `build` otherwise it hangs without turning into an actual agent."]
     pub fn build(self) -> Result<MicroAgent<Ctx>, MicroAgentBuilderError> {
-        let model = self.resolve_model();
+        let model = self.resolve_model()?;
         let system = self.resolve_system(&model);
         match self.provider {
             SupportedProvider::Groq => {
-                check_api_key("GROQ_API_KEY")
-                    .map_err(|_| MicroAgentBuilderError::APIKeyNotFoundError("groq".into()))?;
+                check_env_var("GROQ_API_KEY")
+                    .map_err(|_| MicroAgentBuilderError::EnvVarNotFoundError("groq".into()))?;
             }
             SupportedProvider::OpenAI => {
-                check_api_key("OPENAI_API_KEY")
-                    .map_err(|_| MicroAgentBuilderError::APIKeyNotFoundError("openai".into()))?;
+                check_env_var("OPENAI_API_KEY")
+                    .map_err(|_| MicroAgentBuilderError::EnvVarNotFoundError("openai".into()))?;
             }
             SupportedProvider::OpenRouter => {
-                check_api_key("OPENROUTER_API_KEY").map_err(|_| {
-                    MicroAgentBuilderError::APIKeyNotFoundError("openrouter".into())
+                check_env_var("OPENROUTER_API_KEY").map_err(|_| {
+                    MicroAgentBuilderError::EnvVarNotFoundError("openrouter".into())
+                })?;
+            }
+            SupportedProvider::OpenAICompatible => {
+                check_env_var("OPENAI_API_KEY").map_err(|_| {
+                    MicroAgentBuilderError::EnvVarNotFoundError("openai-compatible".into())
+                })?;
+                check_env_var("OPENAI_BASE_URL").map_err(|_| {
+                    MicroAgentBuilderError::EnvVarNotFoundError("openai-compatible".into())
                 })?;
             }
             _ => {}
@@ -407,6 +426,27 @@ impl<Ctx> MicroAgent<Ctx> {
             }
             SupportedProvider::OpenAI => base_client.with_openai(env::var("OPENAI_API_KEY")?),
             SupportedProvider::Groq => base_client.with_groq(env::var("GROQ_API_KEY")?),
+            SupportedProvider::OpenAICompatible => base_client.with_provider(
+                "openai",
+                ProviderConfig {
+                    name: "openai".into(),
+                    api_key: env::var("OPENAI_API_KEY")?,
+                    base_url: Some(env::var("OPENAI_BASE_URL")?),
+                    timeout: Duration::from_secs(300),
+                    max_retries: 3,
+                    retry_delay: Duration::from_millis(500),
+                    rate_limit: None,
+                    model_mapping: HashMap::new(),
+                    headers: HashMap::new(),
+                    enabled: true,
+                    circuit_breaker: Some(CircuitBreakerConfig {
+                        failure_threshold: 5,
+                        recovery_timeout: Duration::from_secs(30),
+                        request_timeout: Duration::from_secs(10),
+                        half_open_max_calls: 3,
+                    }),
+                },
+            ),
             SupportedProvider::Ollama => base_client.with_provider(
                 "openai",
                 ProviderConfig {
@@ -1203,7 +1243,7 @@ mod tests {
             .provider("groq".into())
             .unwrap()
             .build();
-        assert!(result.is_err_and(|e| matches!(e, MicroAgentBuilderError::APIKeyNotFoundError(_))));
+        assert!(result.is_err_and(|e| matches!(e, MicroAgentBuilderError::EnvVarNotFoundError(_))));
     }
 
     // ------------------------------------------------------------------
@@ -1228,6 +1268,10 @@ mod tests {
             SupportedProvider::from_str("groq").unwrap(),
             SupportedProvider::Groq
         );
+        assert_eq!(
+            SupportedProvider::from_str("openai-compatible").unwrap(),
+            SupportedProvider::OpenAICompatible
+        );
     }
 
     #[test]
@@ -1241,20 +1285,35 @@ mod tests {
         assert_eq!(SupportedProvider::OpenRouter.to_string(), "openrouter");
         assert_eq!(SupportedProvider::Ollama.to_string(), "ollama");
         assert_eq!(SupportedProvider::Groq.to_string(), "groq");
+        assert_eq!(
+            SupportedProvider::OpenAICompatible.to_string(),
+            "openai-compatible"
+        );
     }
 
     #[test]
     fn test_supported_provider_default_model() {
-        assert_eq!(SupportedProvider::OpenAI.default_model(), "gpt-5.5");
-        assert_eq!(SupportedProvider::Ollama.default_model(), "llama3.2");
         assert_eq!(
-            SupportedProvider::Groq.default_model(),
+            SupportedProvider::OpenAI.default_model().unwrap(),
+            "gpt-5.5"
+        );
+        assert_eq!(
+            SupportedProvider::Ollama.default_model().unwrap(),
+            "llama3.2"
+        );
+        assert_eq!(
+            SupportedProvider::Groq.default_model().unwrap(),
             "llama-3.3-70b-versatile"
         );
         assert_eq!(
-            SupportedProvider::OpenRouter.default_model(),
+            SupportedProvider::OpenRouter.default_model().unwrap(),
             "anthropic/claude-opus-4.7"
         );
+        assert!(
+            SupportedProvider::OpenAICompatible
+                .default_model()
+                .is_err_and(|e| matches!(e, MicroAgentBuilderError::ModelNotSpecifiedError(_)))
+        )
     }
 
     #[test]
