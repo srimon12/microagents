@@ -161,7 +161,7 @@ pub enum MicroAgentBuilderError {
     ToolAlreadyDefined(String),
     #[error("Storage could not be loaded: {0}")]
     StorageLoadError(String),
-    #[error("API key not found for provider {0}")]
+    #[error("Environment variable {0} not found")]
     EnvVarNotFoundError(String),
     #[error("Provider {0} should specify a model")]
     ModelNotSpecifiedError(String),
@@ -374,24 +374,26 @@ You are {} provided by {}
         let system = self.resolve_system(&model);
         match self.provider {
             SupportedProvider::Groq => {
-                check_env_var("GROQ_API_KEY")
-                    .map_err(|_| MicroAgentBuilderError::EnvVarNotFoundError("groq".into()))?;
+                check_env_var("GROQ_API_KEY").map_err(|_| {
+                    MicroAgentBuilderError::EnvVarNotFoundError("GROQ_API_KEY".into())
+                })?;
             }
             SupportedProvider::OpenAI => {
-                check_env_var("OPENAI_API_KEY")
-                    .map_err(|_| MicroAgentBuilderError::EnvVarNotFoundError("openai".into()))?;
+                check_env_var("OPENAI_API_KEY").map_err(|_| {
+                    MicroAgentBuilderError::EnvVarNotFoundError("OPENAI_API_KEY".into())
+                })?;
             }
             SupportedProvider::OpenRouter => {
                 check_env_var("OPENROUTER_API_KEY").map_err(|_| {
-                    MicroAgentBuilderError::EnvVarNotFoundError("openrouter".into())
+                    MicroAgentBuilderError::EnvVarNotFoundError("OPENROUTER_API_KEY".into())
                 })?;
             }
             SupportedProvider::OpenAICompatible => {
                 check_env_var("OPENAI_API_KEY").map_err(|_| {
-                    MicroAgentBuilderError::EnvVarNotFoundError("openai-compatible".into())
+                    MicroAgentBuilderError::EnvVarNotFoundError("OPENAI_API_KEY".into())
                 })?;
                 check_env_var("OPENAI_BASE_URL").map_err(|_| {
-                    MicroAgentBuilderError::EnvVarNotFoundError("openai-compatible".into())
+                    MicroAgentBuilderError::EnvVarNotFoundError("OPENAI_BASE_URL".into())
                 })?;
             }
             _ => {}
