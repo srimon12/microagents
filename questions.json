@@ -1,0 +1,1034 @@
+[
+  {
+    "query": "How is the MicroAgentBuilder struct defined and what fields does it contain?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 197,
+        "line_end": 220,
+        "details": "MicroAgentBuilder struct definition with generic T and fields"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 223,
+        "line_end": 240,
+        "details": "MicroAgentBuilder::new() constructor"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 242,
+        "line_end": 252,
+        "details": "add_skill() builder method"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 256,
+        "line_end": 262,
+        "details": "find_skills() builder method"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 264,
+        "line_end": 269,
+        "details": "provider() builder method"
+      }
+    ]
+  },
+  {
+    "query": "What is the Agent trait and what methods must be implemented?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/types.rs",
+        "line_start": 53,
+        "line_end": 68,
+        "details": "Agent trait definition with generate and run methods"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 543,
+        "line_end": 915,
+        "details": "Agent implementation for MicroAgent"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 953,
+        "line_end": 985,
+        "details": "DummyAgent mock implementing Agent"
+      }
+    ]
+  },
+  {
+    "query": "How does the agent handle parallel tool calls and what is the concurrency limit?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 84,
+        "line_end": 86,
+        "details": "MAX_CONCURRENT_TOOL_CALLS constant set to 10"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 792,
+        "line_end": 797,
+        "details": "Semaphore creation with concurrency limit"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 828,
+        "line_end": 846,
+        "details": "JoinSet spawning tool calls with semaphore"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 219,
+        "line_end": 219,
+        "details": "parallel_tool_calls field in builder"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 277,
+        "line_end": 281,
+        "details": "parallel_tool_calls() builder method"
+      }
+    ]
+  },
+  {
+    "query": "How are skills loaded and parsed from disk?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/skills.rs",
+        "line_start": 82,
+        "line_end": 87,
+        "details": "parse_skill() function reading SKILL.md files"
+      },
+      {
+        "file": "microagents-core/src/skills.rs",
+        "line_start": 93,
+        "line_end": 102,
+        "details": "ensure_skill() path resolution"
+      },
+      {
+        "file": "microagents-core/src/skills.rs",
+        "line_start": 107,
+        "line_end": 134,
+        "details": "find_skills() function"
+      },
+      {
+        "file": "microagents-core/src/skills.rs",
+        "line_start": 12,
+        "line_end": 19,
+        "details": "global_skills_path() using OnceLock"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 245,
+        "line_end": 252,
+        "details": "add_skill() on builder"
+      }
+    ]
+  },
+  {
+    "query": "What is the SupportedProvider enum and what are its default models?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 88,
+        "line_end": 98,
+        "details": "SupportedProvider enum definition"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 100,
+        "line_end": 112,
+        "details": "FromStr implementation for SupportedProvider"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 114,
+        "line_end": 125,
+        "details": "Display implementation for SupportedProvider"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 127,
+        "line_end": 149,
+        "details": "default_model() method for each provider"
+      }
+    ]
+  },
+  {
+    "query": "How does the TUI render agent events and handle user input?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 86,
+        "line_end": 102,
+        "details": "App struct and state management"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 161,
+        "line_end": 225,
+        "details": "apply_agent_event() method"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 321,
+        "line_end": 428,
+        "details": "handle_key() function for keyboard input"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 634,
+        "line_end": 681,
+        "details": "draw_transcript() rendering"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 712,
+        "line_end": 790,
+        "details": "draw_input() input box rendering"
+      }
+    ]
+  },
+  {
+    "query": "How is the AgentStorage trait defined and what implementations exist?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-storage/src/types.rs",
+        "line_start": 6,
+        "line_end": 14,
+        "details": "AgentStorage trait definition"
+      },
+      {
+        "file": "microagents-storage/src/types.rs",
+        "line_start": 17,
+        "line_end": 25,
+        "details": "AgentStorageChoice enum"
+      },
+      {
+        "file": "microagents-storage/src/memory.rs",
+        "line_start": 23,
+        "line_end": 59,
+        "details": "InMemoryAgentStorage implementation"
+      },
+      {
+        "file": "microagents-storage/src/jsonl.rs",
+        "line_start": 25,
+        "line_end": 116,
+        "details": "JsonlAgentStorage implementation"
+      },
+      {
+        "file": "microagents-storage/src/sqlite.rs",
+        "line_start": 28,
+        "line_end": 160,
+        "details": "SqliteAgentStorage implementation"
+      }
+    ]
+  },
+  {
+    "query": "How does the SQLite storage backend persist and retrieve session events?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-storage/src/sqlite.rs",
+        "line_start": 34,
+        "line_end": 49,
+        "details": "SqliteAgentStorage::new() constructor"
+      },
+      {
+        "file": "microagents-storage/src/sqlite.rs",
+        "line_start": 51,
+        "line_end": 84,
+        "details": "ensure_table_and_idx() schema setup"
+      },
+      {
+        "file": "microagents-storage/src/sqlite.rs",
+        "line_start": 89,
+        "line_end": 106,
+        "details": "create_session() implementation"
+      },
+      {
+        "file": "microagents-storage/src/sqlite.rs",
+        "line_start": 108,
+        "line_end": 125,
+        "details": "update_session() implementation"
+      },
+      {
+        "file": "microagents-storage/src/sqlite.rs",
+        "line_start": 127,
+        "line_end": 159,
+        "details": "get_session() implementation"
+      }
+    ]
+  },
+  {
+    "query": "How are agent events converted to and from JSON-RPC notifications?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-events/src/types.rs",
+        "line_start": 47,
+        "line_end": 73,
+        "details": "JsonRpcNotification struct and builder"
+      },
+      {
+        "file": "microagents-events/src/types.rs",
+        "line_start": 75,
+        "line_end": 81,
+        "details": "AgentEvent trait"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 166,
+        "line_end": 187,
+        "details": "SessionInitEvent::to_jsonrpc()"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 391,
+        "line_end": 639,
+        "details": "AgentEventAny::try_from(JsonRpcNotification)"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 364,
+        "line_end": 375,
+        "details": "AgentEventAny::to_jsonrpc() dispatch"
+      }
+    ]
+  },
+  {
+    "query": "How does the call_tool function validate and execute tool calls?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/common.rs",
+        "line_start": 124,
+        "line_end": 133,
+        "details": "call_tool() function"
+      },
+      {
+        "file": "microagents-core/src/common.rs",
+        "line_start": 92,
+        "line_end": 100,
+        "details": "JsonResult enum for partial JSON"
+      },
+      {
+        "file": "microagents-core/src/common.rs",
+        "line_start": 106,
+        "line_end": 117,
+        "details": "parse_json_fragment() function"
+      },
+      {
+        "file": "microagents-core/src/types.rs",
+        "line_start": 96,
+        "line_end": 121,
+        "details": "ToolFunction trait definition"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 789,
+        "line_end": 892,
+        "details": "tool call execution loop in run()"
+      }
+    ]
+  },
+  {
+    "query": "How does the EditTool perform atomic file edits?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 416,
+        "line_end": 532,
+        "details": "EditTool implementation"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 486,
+        "line_end": 494,
+        "details": "uniqueness check for old_str"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 500,
+        "line_end": 503,
+        "details": "atomic write with NamedTempFile"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 505,
+        "line_end": 525,
+        "details": "permission preservation"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 527,
+        "line_end": 528,
+        "details": "tmp.persist() atomic replacement"
+      }
+    ]
+  },
+  {
+    "query": "How does the ShellExecuteTool detect and block dangerous commands?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 24,
+        "line_end": 90,
+        "details": "dangerous_regex() regex compilation"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 92,
+        "line_end": 96,
+        "details": "is_dangerous() function"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 534,
+        "line_end": 637,
+        "details": "ShellExecuteTool::execute()"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 583,
+        "line_end": 587,
+        "details": "dangerous command check"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 589,
+        "line_end": 597,
+        "details": "platform-specific command spawning"
+      }
+    ]
+  },
+  {
+    "query": "How does the vector search system chunk and embed code files?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/processing.rs",
+        "line_start": 56,
+        "line_end": 69,
+        "details": "infer_language_from_extension()"
+      },
+      {
+        "file": "microagents-cli/src/processing.rs",
+        "line_start": 75,
+        "line_end": 98,
+        "details": "chunk_code() using AST chunker"
+      },
+      {
+        "file": "microagents-cli/src/processing.rs",
+        "line_start": 100,
+        "line_end": 108,
+        "details": "chunk_text() for non-code"
+      },
+      {
+        "file": "microagents-cli/src/processing.rs",
+        "line_start": 119,
+        "line_end": 129,
+        "details": "embed() dense + sparse embeddings"
+      },
+      {
+        "file": "microagents-cli/src/processing.rs",
+        "line_start": 131,
+        "line_end": 137,
+        "details": "embed_query() for search queries"
+      }
+    ]
+  },
+  {
+    "query": "How is the Qdrant Edge vector store configured and queried?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 46,
+        "line_end": 82,
+        "details": "edge_config() with quantization"
+      },
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 263,
+        "line_end": 273,
+        "details": "load_qdrant_edge() loader"
+      },
+      {
+        "file": "microagents-cli/src/search.rs",
+        "line_start": 23,
+        "line_end": 96,
+        "details": "search() with RRF fusion"
+      },
+      {
+        "file": "microagents-cli/src/search.rs",
+        "line_start": 44,
+        "line_end": 67,
+        "details": "sparse + dense prefetch queries"
+      },
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 26,
+        "line_end": 28,
+        "details": "vector names and size constants"
+      }
+    ]
+  },
+  {
+    "query": "How does the ReadTool handle both text files and unstructured documents?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 256,
+        "line_end": 336,
+        "details": "ReadTool::execute()"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 277,
+        "line_end": 284,
+        "details": "SUPPORTED_LIT_EXTENSIONS check"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 285,
+        "line_end": 305,
+        "details": "LiteParse document parsing"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 307,
+        "line_end": 335,
+        "details": "text file reading with offset/max_length"
+      },
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 31,
+        "line_end": 34,
+        "details": "SUPPORTED_LIT_EXTENSIONS array"
+      }
+    ]
+  },
+  {
+    "query": "How does the environment initialization detect file changes and re-ingest?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 101,
+        "line_end": 144,
+        "details": "Document struct and Diff logic"
+      },
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 228,
+        "line_end": 261,
+        "details": "diff_files() comparison"
+      },
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 183,
+        "line_end": 209,
+        "details": "collect_files() with ignore patterns"
+      },
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 365,
+        "line_end": 453,
+        "details": "ingest_files() concurrent ingestion"
+      },
+      {
+        "file": "microagents-cli/src/init_env.rs",
+        "line_start": 455,
+        "line_end": 471,
+        "details": "delete_files() from vector store"
+      }
+    ]
+  },
+  {
+    "query": "How does the AgentError enum represent different failure modes?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/types.rs",
+        "line_start": 10,
+        "line_end": 42,
+        "details": "AgentError enum definition"
+      },
+      {
+        "file": "microagents-core/src/types.rs",
+        "line_start": 18,
+        "line_end": 20,
+        "details": "ToolCallError variant"
+      },
+      {
+        "file": "microagents-core/src/types.rs",
+        "line_start": 21,
+        "line_end": 23,
+        "details": "RunError variant"
+      },
+      {
+        "file": "microagents-core/src/types.rs",
+        "line_start": 24,
+        "line_end": 26,
+        "details": "ClientInitFailed variant"
+      },
+      {
+        "file": "microagents-core/src/types.rs",
+        "line_start": 39,
+        "line_end": 41,
+        "details": "TokenizerLoadingError variant"
+      }
+    ]
+  },
+  {
+    "query": "How does the SkillsTool load skill instructions at runtime?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 492,
+        "line_end": 494,
+        "details": "SkillsTool struct definition"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 496,
+        "line_end": 540,
+        "details": "SkillsTool ToolFunction implementation"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 531,
+        "line_end": 533,
+        "details": "reading SKILL.md from disk"
+      },
+      {
+        "file": "microagents-core/src/skills.rs",
+        "line_start": 93,
+        "line_end": 102,
+        "details": "ensure_skill() path resolution"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 45,
+        "line_end": 46,
+        "details": "SKILLS_TOOL_NAME constant"
+      }
+    ]
+  },
+  {
+    "query": "How does the TUI theme define colors for different message types?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 45,
+        "line_end": 59,
+        "details": "theme module with color constants"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 48,
+        "line_end": 49,
+        "details": "ACCENT and ACCENT_SOFT blues"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 50,
+        "line_end": 52,
+        "details": "USER, ASSISTANT, THINKING colors"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 53,
+        "line_end": 55,
+        "details": "TOOL, TOOL_OK, TOOL_ERR colors"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 56,
+        "line_end": 58,
+        "details": "SKILL and ERROR colors"
+      }
+    ]
+  },
+  {
+    "query": "How does the MicroAgent::generate() method stream LLM responses?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 549,
+        "line_end": 572,
+        "details": "generate() implementation"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 552,
+        "line_end": 566,
+        "details": "ChatRequest construction with tools"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 569,
+        "line_end": 571,
+        "details": "stream mapping with error conversion"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 420,
+        "line_end": 489,
+        "details": "init_client() lazy initialization"
+      },
+      {
+        "file": "microagents-core/src/types.rs",
+        "line_start": 46,
+        "line_end": 47,
+        "details": "GenerationStream type alias"
+      }
+    ]
+  },
+  {
+    "query": "How does the WriteTool create files and parent directories?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 339,
+        "line_end": 414,
+        "details": "WriteTool implementation"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 398,
+        "line_end": 405,
+        "details": "fs::create_dir_all() for parents"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 406,
+        "line_end": 412,
+        "details": "fs::write() atomic write"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 382,
+        "line_end": 389,
+        "details": "workspace boundary check via is_within_root()"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 98,
+        "line_end": 120,
+        "details": "is_within_root() implementation"
+      }
+    ]
+  },
+  {
+    "query": "How does the JSONL storage backend read and write session files?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-storage/src/jsonl.rs",
+        "line_start": 25,
+        "line_end": 37,
+        "details": "JsonlAgentStorage struct and default"
+      },
+      {
+        "file": "microagents-storage/src/jsonl.rs",
+        "line_start": 60,
+        "line_end": 71,
+        "details": "create_session() append write"
+      },
+      {
+        "file": "microagents-storage/src/jsonl.rs",
+        "line_start": 73,
+        "line_end": 86,
+        "details": "update_session() append write"
+      },
+      {
+        "file": "microagents-storage/src/jsonl.rs",
+        "line_start": 88,
+        "line_end": 115,
+        "details": "get_session() line-by-line read"
+      },
+      {
+        "file": "microagents-storage/src/jsonl.rs",
+        "line_start": 100,
+        "line_end": 107,
+        "details": "corrupted line handling with eprintln"
+      }
+    ]
+  },
+  {
+    "query": "How does the convert_event_to_message function map events to LLM messages?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/common.rs",
+        "line_start": 34,
+        "line_end": 90,
+        "details": "convert_event_to_message() function"
+      },
+      {
+        "file": "microagents-core/src/common.rs",
+        "line_start": 36,
+        "line_end": 42,
+        "details": "UserPromptSubmit -> Role::User"
+      },
+      {
+        "file": "microagents-core/src/common.rs",
+        "line_start": 43,
+        "line_end": 73,
+        "details": "AssistantResponse -> Role::Assistant with tool calls"
+      },
+      {
+        "file": "microagents-core/src/common.rs",
+        "line_start": 74,
+        "line_end": 87,
+        "details": "ToolResult -> Role::Tool"
+      },
+      {
+        "file": "microagents-core/src/common.rs",
+        "line_start": 88,
+        "line_end": 89,
+        "details": "_ => None for non-message events"
+      }
+    ]
+  },
+  {
+    "query": "How does the TUI handle session history loading on resume?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 237,
+        "line_end": 263,
+        "details": "run_with_session() entry point"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 249,
+        "line_end": 259,
+        "details": "load_history() call for resume"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 290,
+        "line_end": 292,
+        "details": "history events applied to transcript"
+      },
+      {
+        "file": "microagents-cli/src/tui/mod.rs",
+        "line_start": 161,
+        "line_end": 225,
+        "details": "apply_agent_event() with is_replay flag"
+      },
+      {
+        "file": "microagents-cli/src/main.rs",
+        "line_start": 70,
+        "line_end": 80,
+        "details": "build_storage() for history loading"
+      }
+    ]
+  },
+  {
+    "query": "How does the SearchTool perform semantic search across the workspace?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 122,
+        "line_end": 160,
+        "details": "SearchTool struct and metadata"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 162,
+        "line_end": 208,
+        "details": "SearchTool::execute() implementation"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 183,
+        "line_end": 183,
+        "details": "embed_query() call"
+      },
+      {
+        "file": "microagents-cli/src/tools.rs",
+        "line_start": 184,
+        "line_end": 207,
+        "details": "vector_search() call and result formatting"
+      },
+      {
+        "file": "microagents-cli/src/search.rs",
+        "line_start": 23,
+        "line_end": 96,
+        "details": "search() function with fusion"
+      }
+    ]
+  },
+  {
+    "query": "How does the CLI main.rs parse arguments and build the agent?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-cli/src/main.rs",
+        "line_start": 24,
+        "line_end": 57,
+        "details": "Args struct with clap derives"
+      },
+      {
+        "file": "microagents-cli/src/main.rs",
+        "line_start": 59,
+        "line_end": 68,
+        "details": "storage_choice() parser"
+      },
+      {
+        "file": "microagents-cli/src/main.rs",
+        "line_start": 82,
+        "line_end": 115,
+        "details": "build_agent() function"
+      },
+      {
+        "file": "microagents-cli/src/main.rs",
+        "line_start": 120,
+        "line_end": 145,
+        "details": "headless mode execution"
+      },
+      {
+        "file": "microagents-cli/src/main.rs",
+        "line_start": 149,
+        "line_end": 175,
+        "details": "TUI mode with closures"
+      }
+    ]
+  },
+  {
+    "query": "How does the InMemoryAgentStorage maintain session state in memory?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-storage/src/memory.rs",
+        "line_start": 10,
+        "line_end": 13,
+        "details": "InMemoryAgentStorage struct with RwLock"
+      },
+      {
+        "file": "microagents-storage/src/memory.rs",
+        "line_start": 15,
+        "line_end": 21,
+        "details": "Default implementation"
+      },
+      {
+        "file": "microagents-storage/src/memory.rs",
+        "line_start": 25,
+        "line_end": 32,
+        "details": "create_session() insert"
+      },
+      {
+        "file": "microagents-storage/src/memory.rs",
+        "line_start": 34,
+        "line_end": 45,
+        "details": "update_session() append"
+      },
+      {
+        "file": "microagents-storage/src/memory.rs",
+        "line_start": 47,
+        "line_end": 58,
+        "details": "get_session() read and sort"
+      }
+    ]
+  },
+  {
+    "query": "How does the Usage struct track token and latency metrics?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 75,
+        "line_end": 82,
+        "details": "Usage struct definition"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 77,
+        "line_end": 78,
+        "details": "latency and input_chars fields"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 79,
+        "line_end": 79,
+        "details": "estimated_input_tokens field"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 80,
+        "line_end": 81,
+        "details": "output_chars and estimated_output_tokens"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 756,
+        "line_end": 769,
+        "details": "Usage construction in stop event"
+      }
+    ]
+  },
+  {
+    "query": "How does the MicroAgentBuilder::resolve_system() assemble the system prompt?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 327,
+        "line_end": 366,
+        "details": "resolve_system() method"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 328,
+        "line_end": 335,
+        "details": "base prompt + model/provider info"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 336,
+        "line_end": 347,
+        "details": "tools XML serialization"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 348,
+        "line_end": 357,
+        "details": "skills XML serialization"
+      },
+      {
+        "file": "microagents-core/src/agent.rs",
+        "line_start": 49,
+        "line_end": 83,
+        "details": "BASE_SYSTEM_PROMPT constant"
+      }
+    ]
+  },
+  {
+    "query": "How does the AgentEventAny enum wrap all possible event types?",
+    "relevant_chunks": [
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 334,
+        "line_end": 346,
+        "details": "AgentEventAny enum definition"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 348,
+        "line_end": 361,
+        "details": "timestamp() method dispatch"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 363,
+        "line_end": 375,
+        "details": "to_jsonrpc() dispatch"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 377,
+        "line_end": 388,
+        "details": "session_id() dispatch"
+      },
+      {
+        "file": "microagents-events/src/lib.rs",
+        "line_start": 391,
+        "line_end": 639,
+        "details": "TryFrom<JsonRpcNotification> implementation"
+      }
+    ]
+  }
+]

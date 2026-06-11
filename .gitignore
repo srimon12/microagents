@@ -4,3 +4,7 @@
 .agents/
 skills-lock.json
 improvements.md
+.claude/
+*.json
+!report.json
+!evals/configs/*.json

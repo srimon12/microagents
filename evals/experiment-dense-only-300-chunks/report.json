@@ -1,0 +1,994 @@
+{
+  "experiment_name": "bm25-only-300-chunks",
+  "num_questions": 30,
+  "avg_precision": 0.16333333333333327,
+  "avg_recall": 0.3299999999999999,
+  "avg_f1": 0.21841269841269853,
+  "avg_mrr": 0.5843518518518518,
+  "questions": [
+    {
+      "query": "How is the MicroAgentBuilder struct defined and what fields does it contain?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 2,
+      "false_positives": 8,
+      "false_negatives": 3,
+      "precision": 0.2,
+      "recall": 0.4,
+      "f1": 0.26666666666666666,
+      "mrr": 0.5,
+      "relevant_ranks": [
+        2,
+        5
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1025-1037",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:196-208",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1019-1025",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1241-1249",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:221-226",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1037-1044",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1089-1096",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:71-80",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1191-1202",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:371-375"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:242-252",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:256-262",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:264-269"
+      ]
+    },
+    {
+      "query": "What is the Agent trait and what methods must be implemented?",
+      "total_relevant": 3,
+      "total_retrieved": 10,
+      "true_positives": 0,
+      "false_positives": 10,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "mrr": 0.0,
+      "relevant_ranks": [],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1159-1169",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1180-1191",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1230-1240",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1169-1180",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1191-1202",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:362-364",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:49-83",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1147-1159",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:0-10"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:53-68",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:543-915",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:953-985"
+      ]
+    },
+    {
+      "query": "How does the agent handle parallel tool calls and what is the concurrency limit?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.3333333333333333,
+      "relevant_ranks": [
+        3
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1180-1191",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1201-1214",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:788-799",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1147-1159",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:236-245",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:49-83",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1230-1240",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:400-414",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:5-13",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:152-164"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:84-86",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:828-846",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:219-219",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:277-281"
+      ]
+    },
+    {
+      "query": "How are skills loaded and parsed from disk?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.1111111111111111,
+      "relevant_ranks": [
+        9
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:66-68",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:253-262",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:249-257",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:400-414",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:265-274",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:49-83",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:491-496",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:81-91",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:258-265"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:93-102",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:107-134",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:12-19",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:245-252"
+      ]
+    },
+    {
+      "query": "What is the SupportedProvider enum and what are its default models?",
+      "total_relevant": 4,
+      "total_retrieved": 10,
+      "true_positives": 2,
+      "false_positives": 8,
+      "false_negatives": 2,
+      "precision": 0.2,
+      "recall": 0.5,
+      "f1": 0.28571428571428575,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        4
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:126-129",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1255-1268",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1296-1309",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:99-101",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1268-1277",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1309-1319",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:128-137",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1284-1289",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:23-32",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:263-272"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:88-98",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:114-125"
+      ]
+    },
+    {
+      "query": "How does the TUI render agent events and handle user input?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.5,
+      "relevant_ranks": [
+        2
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/types.rs:0-6",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:204-208",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:74-84",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:0-10",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:33-42",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1366-1377",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1339-1347",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:48-56",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:0-7"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:86-102",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:321-428",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:634-681",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:712-790"
+      ]
+    },
+    {
+      "query": "How is the AgentStorage trait defined and what implementations exist?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:58-60",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1137-1147",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1159-1169",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:92-96",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1191-1202",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:0-10",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1230-1240",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1328-1339",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1147-1159"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/types.rs:6-14",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/types.rs:17-25",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:23-59",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:28-160"
+      ]
+    },
+    {
+      "query": "How does the SQLite storage backend persist and retrieve session events?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 4,
+      "false_positives": 6,
+      "false_negatives": 1,
+      "precision": 0.4,
+      "recall": 0.8,
+      "f1": 0.5333333333333333,
+      "mrr": 0.5,
+      "relevant_ranks": [
+        2,
+        7,
+        8,
+        10
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:14-19",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:33-38",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:33-45",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:46-59",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/types.rs:6-13",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/lib.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:107-111",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:87-92",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:18-29",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:126-135"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:51-84"
+      ]
+    },
+    {
+      "query": "How are agent events converted to and from JSON-RPC notifications?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 3,
+      "false_positives": 7,
+      "false_negatives": 2,
+      "precision": 0.3,
+      "recall": 0.6,
+      "f1": 0.4,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        3,
+        4
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/types.rs:74-83",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:151-158",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:390-394",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:362-364",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:0-13",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:0-7",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:0-10",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:222-234",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:1041-1047"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/types.rs:47-73",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:166-187"
+      ]
+    },
+    {
+      "query": "How does the call_tool function validate and execute tool calls?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.2,
+      "relevant_ranks": [
+        5
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:73-87",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/types.rs:108-121",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:188-194",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:557-567",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:872-884",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:155-165",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/types.rs:83-100",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1082-1089",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:907-915",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:42-55"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:124-133",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:92-100",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:106-117",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:96-121"
+      ]
+    },
+    {
+      "query": "How does the EditTool perform atomic file edits?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.5,
+      "relevant_ranks": [
+        2
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:94-103",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:420-430",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1096-1105",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:301-312",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:416-420",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:155-165",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:0-10",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:127-133",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:343-351",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:104-111"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:486-494",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:500-503",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:505-525",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:527-528"
+      ]
+    },
+    {
+      "query": "How does the ShellExecuteTool detect and block dangerous commands?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 2,
+      "false_positives": 8,
+      "false_negatives": 3,
+      "precision": 0.2,
+      "recall": 0.4,
+      "f1": 0.26666666666666666,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        3
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:534-538",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:538-554",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:574-588",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:491-496",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:33-41",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/types.rs:37-48",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:210-220",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1082-1089",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:127-133",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:553-569"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:24-90",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:92-96",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:589-597"
+      ]
+    },
+    {
+      "query": "How does the vector search system chunk and embed code files?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.5,
+      "relevant_ranks": [
+        2
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:182-190",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/processing.rs:129-140",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/processing.rs:141-150",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/search.rs:33-40",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/tests/integration_test.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:333-341",
+        "/Users/clee/Desktop/code-projects/microagents/search-evals/src/search.rs:0-5",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:340-352",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/tests/integration_test.rs:246-253",
+        "/Users/clee/Desktop/code-projects/microagents/search-evals/src/ingest.rs:21-27"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/processing.rs:56-69",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/processing.rs:75-98",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/processing.rs:100-108",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/processing.rs:131-137"
+      ]
+    },
+    {
+      "query": "How is the Qdrant Edge vector store configured and queried?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 4,
+      "false_positives": 6,
+      "false_negatives": 1,
+      "precision": 0.4,
+      "recall": 0.8,
+      "f1": 0.5333333333333333,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        6,
+        8,
+        9
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:253-264",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:2-8",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/search.rs:0-7",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:282-288",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/tests/integration_test.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:45-59",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/processing.rs:53-58",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/search.rs:93-95",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/search.rs:39-44",
+        "/Users/clee/Desktop/code-projects/microagents/search-evals/src/ingest.rs:27-36"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:26-28"
+      ]
+    },
+    {
+      "query": "How does the ReadTool handle both text files and unstructured documents?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 0,
+      "false_positives": 10,
+      "false_negatives": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "mrr": 0.0,
+      "relevant_ranks": [],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:215-225",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:155-165",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:125-135",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:872-884",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:343-351",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:94-103",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:301-312",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:400-414",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:127-133",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:224-242"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:256-336",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:277-284",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:285-305",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:307-335",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:31-34"
+      ]
+    },
+    {
+      "query": "How does the environment initialization detect file changes and re-ingest?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 0,
+      "false_positives": 10,
+      "false_negatives": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "mrr": 0.0,
+      "relevant_ranks": [],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/tests/integration_test.rs:122-129",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/tests/integration_test.rs:215-222",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/tests/integration_test.rs:188-195",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/tests/integration_test.rs:149-156",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/tests/integration_test.rs:67-75",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:499-505",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:52-57",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:478-498",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:163-167",
+        "/Users/clee/Desktop/code-projects/microagents/search-evals/src/ingest.rs:41-51"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:101-144",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:228-261",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:183-209",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:365-453",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:455-471"
+      ]
+    },
+    {
+      "query": "How does the AgentError enum represent different failure modes?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 2,
+      "false_positives": 8,
+      "false_negatives": 3,
+      "precision": 0.2,
+      "recall": 0.4,
+      "f1": 0.26666666666666666,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        9
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:10-22",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:390-394",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:884-894",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1169-1180",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:86-94",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1230-1240",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1137-1147",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1159-1169",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:31-40",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1191-1202"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:18-20",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:21-23",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:24-26"
+      ]
+    },
+    {
+      "query": "How does the SkillsTool load skill instructions at runtime?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 3,
+      "false_positives": 7,
+      "false_negatives": 2,
+      "precision": 0.3,
+      "recall": 0.6,
+      "f1": 0.4,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        2,
+        5
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:491-496",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:496-504",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:225-236",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:253-262",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:42-48",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:244-252",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:102-115",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:579-588",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:81-91",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:49-83"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:531-533",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/skills.rs:93-102"
+      ]
+    },
+    {
+      "query": "How does the TUI theme define colors for different message types?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.125,
+      "relevant_ranks": [
+        8
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:711-718",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:590-596",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:574-589",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:517-530",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:719-735",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:481-485",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:447-455",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:44-52",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:470-480",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:241-255"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:48-49",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:50-52",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:53-55",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:56-58"
+      ]
+    },
+    {
+      "query": "How does the MicroAgent::generate() method stream LLM responses?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 3,
+      "false_positives": 7,
+      "false_negatives": 2,
+      "precision": 0.3,
+      "recall": 0.6,
+      "f1": 0.4,
+      "mrr": 0.2,
+      "relevant_ranks": [
+        5,
+        7,
+        9
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:917-927",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:178-183",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1339-1347",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:952-966",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:43-49",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:58-68",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:542-549",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:583-591",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:548-553",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1378-1388"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:569-571",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:420-489"
+      ]
+    },
+    {
+      "query": "How does the WriteTool create files and parent directories?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 2,
+      "false_positives": 8,
+      "false_negatives": 3,
+      "precision": 0.2,
+      "recall": 0.4,
+      "f1": 0.26666666666666666,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        5
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:343-351",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:465-478",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:215-225",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:218-221",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:398-406",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:201-214",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:301-312",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/init_env.rs:173-180",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:94-103",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:125-135"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:406-412",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:382-389",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:98-120"
+      ]
+    },
+    {
+      "query": "How does the JSONL storage backend read and write session files?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 3,
+      "false_positives": 7,
+      "false_negatives": 2,
+      "precision": 0.3,
+      "recall": 0.6,
+      "f1": 0.4,
+      "mrr": 0.25,
+      "relevant_ranks": [
+        4,
+        6,
+        8
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:8-13",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/lib.rs:0-9",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:32-42",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:23-37",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:33-45",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:59-71",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:46-59",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:87-97",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:126-135",
+        "/Users/clee/Desktop/code-projects/microagents/search-evals/src/ingest.rs:36-40"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:73-86",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:100-107"
+      ]
+    },
+    {
+      "query": "How does the convert_event_to_message function map events to LLM messages?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:33-42",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:162-173",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/types.rs:0-6",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/types.rs:6-13",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:156-160",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:272-282",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:177-188",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:31-40",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:107-111",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:151-162"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:36-42",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:43-73",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:74-87",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:88-89"
+      ]
+    },
+    {
+      "query": "How does the TUI handle session history loading on resume?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:233-237",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:33-45",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:46-59",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:573-580",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:126-135",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:130-141",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:227-234",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:41-51",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:198-209",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:271-281"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:249-259",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:290-292",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:161-225",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:70-80"
+      ]
+    },
+    {
+      "query": "How does the SearchTool perform semantic search across the workspace?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:125-135",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:121-125",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:155-165",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:225-236",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:400-414",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/types.rs:110-121",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:215-225",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:496-504",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:210-220",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:491-496"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:162-208",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:183-183",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tools.rs:184-207",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/search.rs:23-96"
+      ]
+    },
+    {
+      "query": "How does the CLI main.rs parse arguments and build the agent?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.1111111111111111,
+      "relevant_ranks": [
+        9
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1159-1169",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1137-1147",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1191-1202",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1230-1240",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1169-1180",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1124-1133",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1180-1191",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1105-1115",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:117-127",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1201-1214"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:24-57",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:59-68",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:82-115",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:149-175"
+      ]
+    },
+    {
+      "query": "How does the InMemoryAgentStorage maintain session state in memory?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 3,
+      "false_positives": 7,
+      "false_negatives": 2,
+      "precision": 0.3,
+      "recall": 0.6,
+      "f1": 0.4,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        2,
+        3
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:23-34",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:33-45",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:46-59",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/sqlite.rs:126-135",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:130-141",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:78-89",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:100-111",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/types.rs:6-13",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:590-606",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/main.rs:41-51"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:10-13",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/memory.rs:15-21"
+      ]
+    },
+    {
+      "query": "How does the Usage struct track token and latency metrics?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.5,
+      "relevant_ranks": [
+        2
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:744-749",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:755-770",
+        "/Users/clee/Desktop/code-projects/microagents/search-evals/src/comparison.rs:213-221",
+        "/Users/clee/Desktop/code-projects/microagents/search-evals/src/main.rs:40-48",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-cli/src/tui/mod.rs:174-186",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:134-137",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:725-732",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:389-398",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:0-13",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/jsonl.rs:158-168"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:75-82",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:77-78",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:79-79",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:80-81"
+      ]
+    },
+    {
+      "query": "How does the MicroAgentBuilder::resolve_system() assemble the system prompt?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 1,
+      "false_positives": 9,
+      "false_negatives": 4,
+      "precision": 0.1,
+      "recall": 0.2,
+      "f1": 0.13333333333333333,
+      "mrr": 0.2,
+      "relevant_ranks": [
+        5
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:371-375",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1191-1202",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:150-152",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1230-1240",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:317-327",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1201-1214",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:221-226",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:196-208",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1019-1025",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:1089-1096"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:328-335",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:336-347",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:348-357",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:49-83"
+      ]
+    },
+    {
+      "query": "How does the AgentEventAny enum wrap all possible event types?",
+      "total_relevant": 5,
+      "total_retrieved": 10,
+      "true_positives": 2,
+      "false_positives": 8,
+      "false_negatives": 3,
+      "precision": 0.2,
+      "recall": 0.4,
+      "f1": 0.26666666666666666,
+      "mrr": 1.0,
+      "relevant_ranks": [
+        1,
+        6
+      ],
+      "retrieved_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:362-364",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:248-250",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/agent.rs:13-18",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:267-269",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:289-291",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:347-349",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:307-309",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:188-190",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-core/src/common.rs:151-162",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-storage/src/types.rs:0-6"
+      ],
+      "missed_chunks": [
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:334-346",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:377-388",
+        "/Users/clee/Desktop/code-projects/microagents/microagents-events/src/lib.rs:391-639"
+      ]
+    }
+  ]
+}

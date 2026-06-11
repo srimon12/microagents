@@ -1,17 +1,29 @@
 use qdrant_edge::{
     AnyVariants, Condition, FieldCondition, Filter, Fusion, JsonPath, Match, NamedQuery, Payload,
-    Prefetch, QueryEnum, QueryRequest, ScoringQuery, SparseVector, WithPayloadInterface,
-    WithVector, external::ordered_float::OrderedFloat,
+    Prefetch, QueryEnum, QueryRequest, ScoredPoint, ScoringQuery, SparseVector,
+    WithPayloadInterface, WithVector, external::ordered_float::OrderedFloat,
 };
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 use crate::init_env::{EmbeddingPayload, SPARSE_VECTORS_NAME, VECTORS_NAME, load_qdrant_edge};
 
-#[derive(Debug, Clone)]
+pub const RERANK_TOP_N: usize = 5;
+pub const DENSE_WEIGHT: f32 = 0.5;
+pub const SPARSE_WEIGHT: f32 = 0.5;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultWithScore {
     pub content: String,
     pub document_path: String,
     pub score: f32,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct SearchResults {
+    pub raw: Vec<ScoredPoint>,
+    pub processed: Vec<ResultWithScore>,
 }
 
 /// Convert Qdrant Payload back to DocMeta
@@ -26,7 +38,7 @@ pub fn search(
     document_paths: Option<Vec<String>>,
     limit: Option<usize>,
     score_threshold: Option<f32>,
-) -> Result<Vec<ResultWithScore>, Box<dyn std::error::Error>> {
+) -> Result<SearchResults, Box<dyn std::error::Error>> {
     let edge_shard = load_qdrant_edge()?;
     let mut all_results: Vec<ResultWithScore> = vec![];
     let threshold: Option<OrderedFloat<f32>> = score_threshold.map(OrderedFloat);
@@ -66,8 +78,11 @@ pub fn search(
             },
         ],
         query: Some(ScoringQuery::Fusion(Fusion::Rrf {
-            k: 2,
-            weights: Some(vec![OrderedFloat(0.75), OrderedFloat(0.25)]),
+            k: RERANK_TOP_N,
+            weights: Some(vec![
+                OrderedFloat(SPARSE_WEIGHT),
+                OrderedFloat(DENSE_WEIGHT),
+            ]),
         })),
         filter: stmt_filter,
         score_threshold: None,
@@ -78,7 +93,7 @@ pub fn search(
         with_payload: WithPayloadInterface::Bool(true),
     };
     let results = edge_shard.query(shard_query)?;
-    for r in results {
+    for r in results.clone() {
         let payload = match r.payload {
             Some(p) => p,
             None => return Err("Found a None payload when searching".into()),
@@ -92,5 +107,8 @@ pub fn search(
         all_results.push(scored_result);
     }
 
-    Ok(all_results)
+    Ok(SearchResults {
+        raw: results,
+        processed: all_results,
+    })
 }
