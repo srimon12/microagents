@@ -6,8 +6,8 @@ use astchunk::{
     types::{Document, DocumentId, Origin},
 };
 use model2vec_rs::model::StaticModel;
-use qdrant_edge::SparseVector;
 use qdrant_edge::bm25_embed::{EdgeBm25, EdgeBm25Config};
+use qdrant_edge::{SparseVector, external::ordered_float::NotNan};
 
 pub const EMBEDDING_MODEL_NAME: &str = "minishlab/potion-base-8M";
 
@@ -38,7 +38,10 @@ static EMBEDDING_MODEL: OnceLock<StaticModel> = OnceLock::new();
 static BM25_CONFIG: OnceLock<EdgeBm25Config> = OnceLock::new();
 
 pub fn bm25_config() -> &'static EdgeBm25Config {
-    BM25_CONFIG.get_or_init(EdgeBm25Config::default)
+    BM25_CONFIG.get_or_init(|| EdgeBm25Config {
+        avg_len: unsafe { NotNan::new_unchecked(1500_f64) },
+        ..Default::default()
+    })
 }
 
 pub fn code_chunker() -> &'static CastChunker {
