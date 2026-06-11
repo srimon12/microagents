@@ -9,6 +9,8 @@ use model2vec_rs::model::StaticModel;
 use qdrant_edge::SparseVector;
 use qdrant_edge::bm25_embed::{EdgeBm25, EdgeBm25Config};
 
+pub const EMBEDDING_MODEL_NAME: &str = "minishlab/potion-base-8M";
+
 #[derive(Debug, Clone)]
 pub struct Chunk {
     pub content: String,
@@ -33,22 +35,27 @@ impl Chunk {
 static CODE_CHUNKER: OnceLock<CastChunker> = OnceLock::new();
 static BM25_EMBEDDER: OnceLock<EdgeBm25> = OnceLock::new();
 static EMBEDDING_MODEL: OnceLock<StaticModel> = OnceLock::new();
+static BM25_CONFIG: OnceLock<EdgeBm25Config> = OnceLock::new();
 
-fn code_chunker() -> &'static CastChunker {
+pub fn bm25_config() -> &'static EdgeBm25Config {
+    BM25_CONFIG.get_or_init(EdgeBm25Config::default)
+}
+
+pub fn code_chunker() -> &'static CastChunker {
     CODE_CHUNKER.get_or_init(|| CastChunker {
         options: CastChunkerOptions::default(),
     })
 }
 
-fn bm25_embedder() -> &'static EdgeBm25 {
+pub fn bm25_embedder() -> &'static EdgeBm25 {
     BM25_EMBEDDER.get_or_init(|| {
-        EdgeBm25::new(EdgeBm25Config::default()).expect("Should be able to get BM25 embedder")
+        EdgeBm25::new(bm25_config().to_owned()).expect("Should be able to get BM25 embedder")
     })
 }
 
 fn embedding_model() -> &'static StaticModel {
     EMBEDDING_MODEL.get_or_init(|| {
-        StaticModel::from_pretrained("minishlab/potion-multilingual-128M", None, None, None)
+        StaticModel::from_pretrained(EMBEDDING_MODEL_NAME, None, None, None)
             .expect("Should be able to get the embedding model")
     })
 }

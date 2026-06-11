@@ -128,8 +128,13 @@ async fn test_search_vanilla() {
         .expect("Environment initialization should not fail");
     let (dense, sparse) = embed_query("Hello World");
     let results = search(dense, sparse, None, None, None).expect("Search should not fail");
-    assert!(results.len() >= 3);
-    assert!(results.iter().any(|r| r.content.contains("Hello World")));
+    assert!(results.processed.len() >= 3);
+    assert!(
+        results
+            .processed
+            .iter()
+            .any(|r| r.content.contains("Hello World"))
+    );
     std::env::set_current_dir(cur_dir)
         .expect("Should be able to change the current working directory");
 }
@@ -167,8 +172,13 @@ async fn test_search_filters() {
         None,
     )
     .expect("Search should not fail");
-    assert_eq!(results.len(), 1);
-    assert!(results.iter().all(|r| r.document_path.contains("test.ts")));
+    assert_eq!(results.processed.len(), 1);
+    assert!(
+        results
+            .processed
+            .iter()
+            .all(|r| r.document_path.contains("test.ts"))
+    );
     std::env::set_current_dir(cur_dir)
         .expect("Should be able to change the current working directory");
 }
@@ -195,7 +205,7 @@ async fn test_search_filters_no_exist() {
     let (dense, sparse) = embed_query("console.log('Hello World')");
     let results = search(dense, sparse, Some(vec!["test.js".to_string()]), None, None)
         .expect("Search should not fail");
-    assert_eq!(results.len(), 0);
+    assert_eq!(results.processed.len(), 0);
     std::env::set_current_dir(cur_dir)
         .expect("Should be able to change the current working directory");
 }
@@ -221,7 +231,7 @@ async fn test_search_limit() {
         .expect("Environment initialization should not fail");
     let (dense, sparse) = embed_query("Hello World");
     let results = search(dense, sparse, None, Some(2), None).expect("Search should not fail");
-    assert_eq!(results.len(), 2);
+    assert_eq!(results.processed.len(), 2);
     std::env::set_current_dir(cur_dir)
         .expect("Should be able to change the current working directory");
 }

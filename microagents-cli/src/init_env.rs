@@ -1,11 +1,10 @@
 use ignore::WalkBuilder;
 use liteparse::{LiteParse, LiteParseConfig};
-use model2vec_rs::model::StaticModel;
 use qdrant_edge::{
     AnyVariants, Condition, Distance, EdgeConfig, EdgeShard, EdgeSparseVectorParams,
-    EdgeVectorParams, FieldCondition, Filter, JsonPath, Match, PointId, PointInsertOperations,
-    PointOperations, PointStruct, PointStructPersisted, QuantizationConfig, SparseVector,
-    UpdateOperation, Vector, Vectors,
+    EdgeVectorParams, FieldCondition, Filter, HnswIndexConfig, JsonPath, Match, PointId,
+    PointInsertOperations, PointOperations, PointStruct, PointStructPersisted, QuantizationConfig,
+    SparseVector, UpdateOperation, Vector, Vectors,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,18 +31,10 @@ pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
     ".pdf", ".doc", ".docx", ".docm", ".odt", ".rtf", ".ppt", ".pptx", ".pptm", ".odp", ".xls",
     ".xlsx", ".xlsm", ".ods", ".csv", ".tsv",
 ];
-static EMBEDDING_MODEL: OnceLock<StaticModel> = OnceLock::new();
 static EDGE_CONFIG: OnceLock<EdgeConfig> = OnceLock::new();
 pub static PARSER_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
-fn embedding_model() -> &'static StaticModel {
-    EMBEDDING_MODEL.get_or_init(|| {
-        StaticModel::from_pretrained("minishlab/potion-multilingual-128M", None, None, None)
-            .expect("Should be able to get the embedding model")
-    })
-}
-
-fn edge_config() -> &'static EdgeConfig {
+pub fn edge_config() -> &'static EdgeConfig {
     EDGE_CONFIG.get_or_init(|| {
         let config: QuantizationConfig = serde_json::from_value(serde_json::json!({
             "turbo": {
@@ -73,7 +64,11 @@ fn edge_config() -> &'static EdgeConfig {
                     ..Default::default()
                 },
             )]),
-            hnsw_config: Default::default(),
+            hnsw_config: HnswIndexConfig {
+                m: 60,
+                ef_construct: 800,
+                ..Default::default()
+            },
             quantization_config: None,
             optimizers: Default::default(),
             wal_options: None,
@@ -478,7 +473,6 @@ pub async fn initialize_environment(
         fs::create_dir_all(root_path.join(".microagents"))?;
     }
 
-    let _ = embedding_model();
     let _ = edge_config();
 
     let files = collect_files()?;

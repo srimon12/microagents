@@ -190,6 +190,7 @@ impl ToolFunction<()> for SearchTool {
         ) {
             Ok(results) => {
                 let payload: Vec<Value> = results
+                    .processed
                     .into_iter()
                     .map(|r| {
                         json!({

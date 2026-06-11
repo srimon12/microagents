@@ -3432,7 +3432,7 @@ dependencies = [
 
 [[package]]
 name = "microagents-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "astchunk",
  "async-trait",
@@ -5411,6 +5411,18 @@ name = "seahash"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
+
+[[package]]
+name = "search-evals"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "microagents-cli",
+ "serde",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "security-framework"
