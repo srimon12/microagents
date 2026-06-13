@@ -151,9 +151,9 @@ impl ToolFunction<()> for SearchTool {
                     "minimum": 1,
                     "description": "Maximum number of results to return (default 10)."
                 },
-                "score_threshold": {
-                    "type": "number",
-                    "description": "Optional minimum similarity score for returned results."
+                "is_code": {
+                    "type": "boolean",
+                    "description": "Whether the search query refers to code (used to boost code results score). Defaults to False."
                 }
             }
         })
@@ -178,15 +178,17 @@ impl ToolFunction<()> for SearchTool {
                 .collect()
         });
         let limit = input["limit"].as_u64().map(|l| l as usize);
-        let score_threshold = input["score_threshold"].as_f64().map(|l| l as f32);
+        let is_code = input["is_code"].as_bool().unwrap_or(false);
 
-        let (embedding, sparse_embedding) = embed_query(&query);
+        let (embedding, code_embedding, sparse_embedding) = embed_query(&query);
         match vector_search(
+            &query,
             embedding,
+            code_embedding,
             sparse_embedding,
             document_paths,
             limit,
-            score_threshold,
+            is_code,
         ) {
             Ok(results) => {
                 let payload: Vec<Value> = results
