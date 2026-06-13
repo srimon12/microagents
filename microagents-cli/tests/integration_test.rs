@@ -126,8 +126,9 @@ async fn test_search_vanilla() {
     initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
-    let (dense, sparse) = embed_query("Hello World");
-    let results = search(dense, sparse, None, None, None).expect("Search should not fail");
+    let (dense, code, sparse) = embed_query("Hello World");
+    let results = search("Hello World", dense, code, sparse, None, None, false)
+        .expect("Search should not fail");
     assert!(results.processed.len() >= 3);
     assert!(
         results
@@ -158,18 +159,20 @@ async fn test_search_filters() {
     initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
-    let (dense, sparse) = embed_query("console.log('Hello World')");
+    let (dense, code, sparse) = embed_query("console.log('Hello World')");
     let ts_path = tmp
         .path()
         .join("test.ts")
         .canonicalize()
         .expect("Should canonicalize test.ts");
     let results = search(
+        "console.log('Hello World')",
         dense,
+        code,
         sparse,
         Some(vec![ts_path.to_str().unwrap().to_string()]),
         None,
-        None,
+        true,
     )
     .expect("Search should not fail");
     assert_eq!(results.processed.len(), 1);
@@ -202,9 +205,17 @@ async fn test_search_filters_no_exist() {
     initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
-    let (dense, sparse) = embed_query("console.log('Hello World')");
-    let results = search(dense, sparse, Some(vec!["test.js".to_string()]), None, None)
-        .expect("Search should not fail");
+    let (dense, code, sparse) = embed_query("console.log('Hello World')");
+    let results = search(
+        "console.log('Hello World')",
+        dense,
+        code,
+        sparse,
+        Some(vec!["test.js".to_string()]),
+        None,
+        true,
+    )
+    .expect("Search should not fail");
     assert_eq!(results.processed.len(), 0);
     std::env::set_current_dir(cur_dir)
         .expect("Should be able to change the current working directory");
@@ -229,8 +240,9 @@ async fn test_search_limit() {
     initialize_environment(false)
         .await
         .expect("Environment initialization should not fail");
-    let (dense, sparse) = embed_query("Hello World");
-    let results = search(dense, sparse, None, Some(2), None).expect("Search should not fail");
+    let (dense, code, sparse) = embed_query("Hello World");
+    let results = search("Hello World", dense, code, sparse, None, Some(2), false)
+        .expect("Search should not fail");
     assert_eq!(results.processed.len(), 2);
     std::env::set_current_dir(cur_dir)
         .expect("Should be able to change the current working directory");
@@ -262,8 +274,9 @@ if __name__ == '__main__':
     chunks_code = embed(chunks_code);
     assert!(chunks_code.len() >= 2);
     for c in chunks_code {
-        assert!(c.embedding.is_some_and(|e| e.len() == 256));
+        assert!(c.embedding.is_some_and(|e| e.len() == 768));
         assert!(c.sparse_embedding.is_some());
+        assert!(c.code_embedding.is_some_and(|e| e.len() == 768));
         if c.line_start.is_some() && c.line_end.is_some() {
             assert!(c.content.contains("hello_world"));
         }

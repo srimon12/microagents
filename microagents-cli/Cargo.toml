@@ -1,6 +1,6 @@
 [package]
 name = "microagents-cli"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
@@ -15,7 +15,6 @@ futures-util = "0.3.32"
 microagents-core = { path = "../microagents-core", version = "0.3.0" }
 microagents-events = { path = "../microagents-events", version = "0.1.0" }
 microagents-storage = { path = "../microagents-storage", version = "0.1.0" }
-model2vec-rs = "0.2.1"
 qdrant-edge = "0.7.1"
 ratatui = {version = "0.30.0", features = ["serde", "palette"]}
 serde_json = "1.0.150"
@@ -29,7 +28,8 @@ regex = "1.12.3"
 clap = { version = "4.6.1", features = ["derive"] }
 astchunk = "0.2.0"
 tempfile = "3.27.0"
-
+fastembed = "5"
+dirs = "6.0.0"
 
 [target.'cfg(windows)'.dependencies]
 liteparse = { version = "2.0.2", default-features = false }

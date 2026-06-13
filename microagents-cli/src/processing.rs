@@ -1,15 +1,21 @@
-use std::sync::OnceLock;
+use std::{
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+};
 
 use astchunk::{
     chunker::{CastChunker, CastChunkerOptions, Chunker},
     lang::Language,
     types::{Document, DocumentId, Origin},
 };
-use model2vec_rs::model::StaticModel;
+use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use qdrant_edge::bm25_embed::{EdgeBm25, EdgeBm25Config};
 use qdrant_edge::{SparseVector, external::ordered_float::NotNan};
 
-pub const EMBEDDING_MODEL_NAME: &str = "minishlab/potion-base-8M";
+#[allow(dead_code)]
+pub const CODE_EMBEDDING_MODEL_NAME: &str = "jinaai/jina-embeddings-v2-base-code";
+#[allow(dead_code)]
+pub const TEXT_EMBEDDING_MODEL_NAME: &str = "jinaai/jina-embeddings-v2-base-en";
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
@@ -17,6 +23,7 @@ pub struct Chunk {
     pub line_start: Option<u32>,
     pub line_end: Option<u32>,
     pub embedding: Option<Vec<f32>>,
+    pub code_embedding: Option<Vec<f32>>,
     pub sparse_embedding: Option<SparseVector>,
 }
 
@@ -26,6 +33,7 @@ impl Chunk {
             content,
             line_end,
             line_start,
+            code_embedding: None,
             embedding: None,
             sparse_embedding: None,
         }
@@ -34,8 +42,19 @@ impl Chunk {
 
 static CODE_CHUNKER: OnceLock<CastChunker> = OnceLock::new();
 static BM25_EMBEDDER: OnceLock<EdgeBm25> = OnceLock::new();
-static EMBEDDING_MODEL: OnceLock<StaticModel> = OnceLock::new();
 static BM25_CONFIG: OnceLock<EdgeBm25Config> = OnceLock::new();
+static TEXT_EMBEDDING_MODEL: OnceLock<Mutex<TextEmbedding>> = OnceLock::new();
+static CODE_EMBEDDING_MODEL: OnceLock<Mutex<TextEmbedding>> = OnceLock::new();
+pub static FASTEMBED_CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn fastembed_cache_dir() -> &'static PathBuf {
+    FASTEMBED_CACHE_DIR.get_or_init(|| {
+        dirs::home_dir()
+            .expect("could not determine home directory")
+            .join(".microagents")
+            .join("fastembed-cache")
+    })
+}
 
 pub fn bm25_config() -> &'static EdgeBm25Config {
     BM25_CONFIG.get_or_init(|| EdgeBm25Config {
@@ -45,8 +64,12 @@ pub fn bm25_config() -> &'static EdgeBm25Config {
 }
 
 pub fn code_chunker() -> &'static CastChunker {
-    CODE_CHUNKER.get_or_init(|| CastChunker {
-        options: CastChunkerOptions::default(),
+    CODE_CHUNKER.get_or_init(|| {
+        let mut c = CastChunker {
+            options: CastChunkerOptions::default(),
+        };
+        c.options.overlap_nodes = 30;
+        c
     })
 }
 
@@ -56,10 +79,31 @@ pub fn bm25_embedder() -> &'static EdgeBm25 {
     })
 }
 
-fn embedding_model() -> &'static StaticModel {
-    EMBEDDING_MODEL.get_or_init(|| {
-        StaticModel::from_pretrained(EMBEDDING_MODEL_NAME, None, None, None)
-            .expect("Should be able to get the embedding model")
+fn text_embedding_model() -> &'static Mutex<TextEmbedding> {
+    TEXT_EMBEDDING_MODEL.get_or_init(|| {
+        Mutex::new(
+            TextEmbedding::try_new(
+                InitOptions::new(EmbeddingModel::JinaEmbeddingsV2BaseEN)
+                    .with_show_download_progress(true)
+                    .with_intra_threads(2)
+                    .with_cache_dir(fastembed_cache_dir().to_owned()),
+            )
+            .expect("Should be able to load text embedding model"),
+        )
+    })
+}
+
+fn code_embedding_model() -> &'static Mutex<TextEmbedding> {
+    CODE_EMBEDDING_MODEL.get_or_init(|| {
+        Mutex::new(
+            TextEmbedding::try_new(
+                InitOptions::new(EmbeddingModel::JinaEmbeddingsV2BaseCode)
+                    .with_show_download_progress(true)
+                    .with_intra_threads(2)
+                    .with_cache_dir(fastembed_cache_dir().to_owned()),
+            )
+            .expect("Should be able to load text embedding model"),
+        )
     })
 }
 
@@ -128,22 +172,51 @@ pub fn chunk(extension: &str, content: String) -> Result<Vec<Chunk>, Box<dyn std
 
 pub fn embed(mut chunks: Vec<Chunk>) -> Vec<Chunk> {
     let bm25 = bm25_embedder();
-    let embedder = embedding_model();
+    let embedder_mu = text_embedding_model();
+    let code_embedder_mu = code_embedding_model();
+    let mut embedder = embedder_mu
+        .lock()
+        .expect("Mutex on text embedding model has been poisoned");
+    let mut code_embedder = code_embedder_mu
+        .lock()
+        .expect("Mutext on code embedding model has been poisoned");
     for c in &mut *chunks {
         let sparse_embd = bm25.embed_document(&c.content);
-        let dense_embd = embedder.encode_single(&c.content);
-        c.embedding = Some(dense_embd);
+        let dense_embd = embedder
+            .embed(vec![&format!("passage: {}", c.content)], None)
+            .expect("Should be able to embed");
+        let code_embd = code_embedder
+            .embed(vec![&format!("passage: {}", c.content)], None)
+            .expect("");
+        c.embedding = Some(<Vec<f32> as Clone>::clone(&dense_embd[0]));
+        c.code_embedding = Some(<Vec<f32> as Clone>::clone(&code_embd[0]));
         c.sparse_embedding = Some(sparse_embd);
     }
     chunks
 }
 
-pub fn embed_query(query: &str) -> (Vec<f32>, SparseVector) {
+pub fn embed_query(query: &str) -> (Vec<f32>, Vec<f32>, SparseVector) {
     let bm25 = bm25_embedder();
-    let embedder = embedding_model();
-    let dense_embd = embedder.encode_single(query);
+    let embedder_mu = text_embedding_model();
+    let code_embedder_mu = code_embedding_model();
+    let mut embedder = embedder_mu
+        .lock()
+        .expect("Mutex on text embedding model has been poisoned");
+    let mut code_embedder = code_embedder_mu
+        .lock()
+        .expect("Mutext on code embedding model has been poisoned");
+    let dense_embd = embedder
+        .embed(vec![&format!("query: {}", query)], None)
+        .expect("Should be able to embed query");
+    let code_embd = code_embedder
+        .embed(vec![&format!("query: {}", query)], None)
+        .expect("Should be able to embed query");
     let sparse_embd = bm25.embed_query(query);
-    (dense_embd, sparse_embd)
+    (
+        <Vec<f32> as Clone>::clone(&dense_embd[0]),
+        <Vec<f32> as Clone>::clone(&code_embd[0]),
+        sparse_embd,
+    )
 }
 
 #[cfg(test)]

@@ -2,8 +2,19 @@
   "qdrant_edge_config": {
     "on_disk_payload": true,
     "vectors": {
-      "dense_text": {
-        "size": 256,
+      "text": {
+        "size": 768,
+        "distance": "Cosine",
+        "on_disk": true,
+        "quantization_config": {
+          "turbo": {
+            "always_ram": true,
+            "bits": "bits4"
+          }
+        }
+      },
+      "code": {
+        "size": 768,
         "distance": "Cosine",
         "on_disk": true,
         "quantization_config": {
@@ -15,7 +26,7 @@
       }
     },
     "sparse_vectors": {
-      "sparse_text": {
+      "sparse": {
         "modifier": "idf"
       }
     },
@@ -35,10 +46,11 @@
       "prevent_unoptimized": null
     }
   },
-  "embedding_model_name": "minishlab/potion-base-8M",
+  "text_embeddng_model_name": "jinaai/jina-embeddings-v2-base-en",
+  "code_embeddng_model_name": "jinaai/jina-embeddings-v2-base-code",
   "ast_chunking_options": {
     "max_nws_size": 1500,
-    "overlap_nodes": 10
+    "overlap_nodes": 30
   },
   "bm25_embedder_options": {
     "k": 1.2,
@@ -47,7 +59,10 @@
     "tokenizer": "word"
   },
   "rerank_top_n": 5,
-  "dense_weight": 0.5,
-  "sparse_weight": 0.5,
-  "prefetch_top_n": 30
+  "dense_weight": 0.20000000298023224,
+  "sparse_weight": 0.30000001192092896,
+  "code_weight": 0.5,
+  "prefetch_top_n": 30,
+  "top_k_files": 5,
+  "top_chunks_per_file": 5
 }
