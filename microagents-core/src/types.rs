@@ -58,7 +58,7 @@ pub type RunStream = Pin<Box<dyn futures_core::Stream<Item = RunStreamItem> + Se
 #[async_trait::async_trait]
 pub trait Agent: Send + Sync {
     /// Generate the next assistant response as a raw token stream.
-    async fn generate(&mut self) -> Result<GenerationStream, AgentError>;
+    async fn generate(&mut self, sticky_session_id: &str) -> Result<GenerationStream, AgentError>;
     /// Run a complete conversation turn, optionally resuming an existing session.
     async fn run(
         mut self,
