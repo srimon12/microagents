@@ -8,6 +8,8 @@ use std::{
     time::Duration,
 };
 
+use dashmap::DashMap;
+
 use async_stream::stream;
 use chrono::Utc;
 use futures_util::StreamExt;
@@ -180,7 +182,6 @@ impl Debug for DebuggableClient {
 ///
 /// Created via [`MicroAgentBuilder`]. Holds the conversation history, tool
 /// registry, and LLM client configuration.
-#[derive(Debug)]
 pub struct MicroAgent<Ctx> {
     pub history: Vec<Message>,
     pub tools: HashMap<String, Arc<dyn ToolFunction<Ctx>>>,
@@ -189,9 +190,29 @@ pub struct MicroAgent<Ctx> {
     pub model: String,
     pub system: String,
     client: Option<DebuggableClient>,
+    /// Per-session clients for OpenRouter so that `x-session-id` is never reused across sessions.
+    pub openrouter_clients: DashMap<String, Arc<DebuggableClient>>,
     pub tool_context: Arc<ToolExecutionContext<Ctx>>,
     pub storage: Box<dyn AgentStorage>,
     pub parallel_tool_calls: bool,
+}
+
+impl<Ctx: Debug> Debug for MicroAgent<Ctx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MicroAgent")
+            .field("history", &self.history)
+            .field("tools", &self.tools)
+            .field("skills", &self.skills)
+            .field("provider", &self.provider)
+            .field("model", &self.model)
+            .field("system", &self.system)
+            .field("client", &self.client)
+            .field("openrouter_clients", &self.openrouter_clients.len())
+            .field("tool_context", &self.tool_context)
+            .field("storage", &self.storage)
+            .field("parallel_tool_calls", &self.parallel_tool_calls)
+            .finish()
+    }
 }
 
 /// Builder for [`MicroAgent`].
@@ -405,6 +426,7 @@ You are {} provided by {}
             model,
             provider: self.provider,
             client: None,
+            openrouter_clients: DashMap::new(),
             system,
             tool_context: self.tool_context,
             storage: self.storage,
@@ -416,11 +438,26 @@ You are {} provided by {}
 impl<Ctx> MicroAgent<Ctx> {
     /// Lazily initialise the LLM client.
     ///
-    /// The client is cached after the first call.
-    fn init_client(&mut self, sticky_session_id: &str) -> Result<Arc<UltrafastClient>, AgentError> {
-        if let Some(c) = self.client.as_ref() {
+    /// For non-OpenRouter providers the client is cached after the first call.
+    /// For OpenRouter a separate client is created (and cached) per
+    /// `sticky_session_id` so that the `x-session-id` header is never reused
+    /// across sessions.
+    pub fn init_client(
+        &mut self,
+        sticky_session_id: &str,
+    ) -> Result<Arc<UltrafastClient>, AgentError> {
+        if self.provider != SupportedProvider::OpenRouter
+            && let Some(c) = self.client.as_ref()
+        {
             return Ok(c.0.clone());
         }
+
+        if self.provider == SupportedProvider::OpenRouter
+            && let Some(entry) = self.openrouter_clients.get(sticky_session_id)
+        {
+            return Ok(entry.0.clone());
+        }
+
         let mut base_client = UltrafastClient::standalone();
         base_client = match self.provider {
             SupportedProvider::OpenRouter => base_client.with_provider(
@@ -505,7 +542,16 @@ impl<Ctx> MicroAgent<Ctx> {
             .build()
             .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
         let arcc = Arc::new(client);
-        self.client = Some(DebuggableClient(arcc.clone()));
+
+        if self.provider == SupportedProvider::OpenRouter {
+            self.openrouter_clients.insert(
+                sticky_session_id.to_string(),
+                Arc::new(DebuggableClient(arcc.clone())),
+            );
+        } else {
+            self.client = Some(DebuggableClient(arcc.clone()));
+        }
+
         Ok(arcc)
     }
 }

@@ -130,3 +130,26 @@ async fn test_microagent_integration() {
     assert!(has_stop);
     assert!(!has_skill);
 }
+
+#[test]
+fn test_sticky_sessions() {
+    match std::env::var("OPENROUTER_API_KEY") {
+        Ok(_) => {}
+        Err(_) => return,
+    }
+    let mut agent = MicroAgentBuilder::<()>::new(ToolExecutionContext::<()>::new(()))
+        .model("openrouter/owl-alpha".into())
+        .provider("openrouter".into())
+        .expect("Should load provider")
+        .build()
+        .expect("Should be able to build the agent");
+    let _ = agent
+        .init_client("session-1")
+        .expect("Should be able to init client");
+    let _ = agent
+        .init_client("session-2")
+        .expect("Should be able to init client");
+    assert_eq!(agent.openrouter_clients.len(), 2);
+    assert!(agent.openrouter_clients.contains_key("session-1"));
+    assert!(agent.openrouter_clients.contains_key("session-2"));
+}
