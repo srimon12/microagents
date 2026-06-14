@@ -15,7 +15,7 @@ A minimal, modular AI-agent framework written in Rust. It provides a small core 
 
 ## Features
 
-- **Multi-provider LLM support** — OpenAI, OpenRouter, Groq and Ollama out of the box (via `ultrafast-models-sdk`).
+- **Multi-provider LLM support** — OpenAI (and chat completions-compatible providers), OpenRouter, Groq and Ollama out of the box (via `ultrafast-models-sdk`).
 - **Tool-use loop** — the agent can call tools, wait for results, and continue the conversation. Supports parallel tool calls.
 - **Skills** — drop-in markdown skill packs with front-matter (`name`, `description`, `allowed-tools`, …) loaded from `./.agents/skills` or `~/.agents/skills`.
 - **Session storage** — resume conversations by persisting events to JSONL files, SQLite, or keep them in memory (not recommended).
@@ -24,7 +24,7 @@ A minimal, modular AI-agent framework written in Rust. It provides a small core 
   - `write` — create or overwrite files (with auto-created parent directories).
   - `edit` — exact-string replacement in a file.
   - `shell_execute` — run shell commands with a dangerous-command regex guard.
-  - `search` — semantic + sparse (BM25) hybrid search over the workspace, powered by `qdrant-edge`, `model2vec-rs` and `astchunk`.
+  - `search` — semantic (code and text embeddings) + sparse (BM25) hybrid search over the workspace, powered by `qdrant-edge`, `fastembed-rs` and `astchunk`, using TurboQuant quantization.
 - **Embedded TUI for `microagents-cli`** — `ratatui`-based chat interface with streaming deltas, tool-call visualization, scrolling history, and session resume.
 
 ## Compatibility
@@ -38,9 +38,7 @@ Rust 1.91.1+ is necessary.
 Clone the repository and install from source:
 
 ```bash
-git clone https://github.com/AstraBert/microagents
-cd microagents
-cargo +nightly install --path microagents-cli
+cargo +nightly install microagents-cli
 ```
 
 This will install the `microag` binary.
@@ -49,12 +47,6 @@ Run the TUI with default settings:
 
 ```bash
 microag
-```
-
-Run in verbose mode to see codebase indexing progression:
-
-```bash
-microag --verbose
 ```
 
 Run the TUI customizing model/provider/storage backend:
@@ -73,6 +65,12 @@ Run in headless mode, printing JSON-RPC-serialized events to the console, using 
 
 ```bash
 microag -p 'Where is AgentStorage defined and which storage backends implement it?'
+```
+
+Run in verbose mode to see codebase indexing progression:
+
+```bash
+microag --verbose -p 'Where is AgentStorage defined and which storage backends implement it?'
 ```
 
 ## Architecture overview
@@ -97,6 +95,12 @@ microag -p 'Where is AgentStorage defined and which storage backends implement i
 ```
 
 ## Programmatic usage
+
+Add the libraries with:
+
+```bash
+cargo add microagents-events microagents-storage microagents-core
+```
 
 ### Creating an agent
 
@@ -169,6 +173,7 @@ impl ToolFunction<()> for MyTool {
 |----------|--------------|-------------|
 | `OPENROUTER_API_KEY` | OpenRouter | API key for OpenRouter (default provider) |
 | `OPENAI_API_KEY` | OpenAI | API key for OpenAI |
+| `OPENAI_API_KEY` and `OPENAI_BASE_URL` | OpenAI-Compatible providers | API key and base URL for OpenAI-compatible providers |
 | `GROQ_API_KEY` | Groq | API key for Groq |
 | `OLLAMA_BASE_URL` | Ollama | Base URL for Ollama (defaults to `http://localhost:11434/v1`) |
 
