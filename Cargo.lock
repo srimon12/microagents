@@ -3779,6 +3779,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "ignore",
+ "indicatif 0.18.4",
  "liteparse",
  "microagents-core",
  "microagents-events",

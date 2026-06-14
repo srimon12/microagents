@@ -1,0 +1,68 @@
+{
+  "qdrant_edge_config": {
+    "on_disk_payload": true,
+    "vectors": {
+      "code": {
+        "size": 768,
+        "distance": "Cosine",
+        "on_disk": true,
+        "quantization_config": {
+          "turbo": {
+            "always_ram": true,
+            "bits": "bits4"
+          }
+        }
+      },
+      "text": {
+        "size": 768,
+        "distance": "Cosine",
+        "on_disk": true,
+        "quantization_config": {
+          "turbo": {
+            "always_ram": true,
+            "bits": "bits4"
+          }
+        }
+      }
+    },
+    "sparse_vectors": {
+      "sparse": {
+        "modifier": "idf"
+      }
+    },
+    "hnsw_config": {
+      "m": 60,
+      "ef_construct": 800,
+      "full_scan_threshold": 10000,
+      "max_indexing_threads": 0,
+      "on_disk": false
+    },
+    "optimizers": {
+      "deleted_threshold": null,
+      "vacuum_min_vector_number": null,
+      "default_segment_number": null,
+      "max_segment_size": null,
+      "indexing_threshold": null,
+      "prevent_unoptimized": null
+    }
+  },
+  "text_embeddng_model_name": "jinaai/jina-embeddings-v2-base-en",
+  "code_embeddng_model_name": "jinaai/jina-embeddings-v2-base-code",
+  "ast_chunking_options": {
+    "max_nws_size": 1500,
+    "overlap_nodes": 30
+  },
+  "bm25_embedder_options": {
+    "k": 1.2,
+    "b": 0.75,
+    "avg_len": 1500.0,
+    "tokenizer": "word"
+  },
+  "rerank_top_n": 5,
+  "dense_weight": 0.20000000298023224,
+  "sparse_weight": 0.30000001192092896,
+  "code_weight": 0.5,
+  "prefetch_top_n": 30,
+  "top_k_files": 5,
+  "top_chunks_per_file": 5
+}

@@ -1,4 +1,5 @@
 use ignore::WalkBuilder;
+use indicatif::ProgressIterator;
 use liteparse::{LiteParse, LiteParseConfig};
 use qdrant_edge::{
     AnyVariants, Condition, Distance, EdgeConfig, EdgeShard, EdgeSparseVectorParams,
@@ -402,8 +403,8 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
         }
     });
 
-    for fl in to_ingest {
-        let abs_path = root_path.join(&fl);
+    for fl in to_ingest.iter().progress() {
+        let abs_path = root_path.join(fl);
         let permit = semaphore.clone().acquire_owned().await?;
         let tx = tx.clone();
         join_set.spawn(async move {
@@ -522,7 +523,13 @@ pub async fn initialize_environment(
         println!("Applying changes to detected diff files...");
     }
 
+    if verbose && !diff.deleted.is_empty() {
+        println!("Removing deleted files from vector index...")
+    }
     delete_files(diff.to_delete())?;
+    if verbose && !diff.to_reingest().is_empty() {
+        println!("Ingesting changed and added files...")
+    }
     ingest_files(diff.to_reingest()).await?;
     persist_file_changes(files_content)?;
 

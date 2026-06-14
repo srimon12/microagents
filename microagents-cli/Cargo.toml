@@ -30,6 +30,7 @@ astchunk = "0.2.0"
 tempfile = "3.27.0"
 fastembed = "5"
 dirs = "6.0.0"
+indicatif = "0.18.4"
 
 [target.'cfg(windows)'.dependencies]
 liteparse = { version = "2.0.2", default-features = false }

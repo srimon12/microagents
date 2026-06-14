@@ -10,7 +10,7 @@ pub fn search_queries(experiment_name: &str, questions: Vec<Question>) -> anyhow
     for question in questions {
         i += 1;
         let (dense, code, sparse) = embed_query(&question.query);
-        let results = search(&question.query, dense, code, sparse, None, None, true)
+        let results = search(&question.query, dense, code, sparse, None, None, false)
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let mut raw_results: Vec<Value> = Vec::with_capacity(results.raw.len());
         for r in results.raw {

@@ -18,7 +18,7 @@ use crate::{
     processing::fastembed_cache_dir,
 };
 
-pub const RERANK_TOP_N: usize = 5;
+pub const RERANK_TOP_N: usize = 10;
 pub const DENSE_WEIGHT: f32 = 0.4;
 pub const SPARSE_WEIGHT: f32 = 0.3;
 pub const CODE_WEIGHT: f32 = 0.3;

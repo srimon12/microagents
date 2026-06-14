@@ -179,15 +179,15 @@ pub fn embed(mut chunks: Vec<Chunk>) -> Vec<Chunk> {
         .expect("Mutex on text embedding model has been poisoned");
     let mut code_embedder = code_embedder_mu
         .lock()
-        .expect("Mutext on code embedding model has been poisoned");
+        .expect("Mutex on code embedding model has been poisoned");
     for c in &mut *chunks {
         let sparse_embd = bm25.embed_document(&c.content);
         let dense_embd = embedder
             .embed(vec![&format!("passage: {}", c.content)], None)
-            .expect("Should be able to embed");
+            .expect("Should be able to create text embedding");
         let code_embd = code_embedder
             .embed(vec![&format!("passage: {}", c.content)], None)
-            .expect("");
+            .expect("Should be able to create code embedding");
         c.embedding = Some(<Vec<f32> as Clone>::clone(&dense_embd[0]));
         c.code_embedding = Some(<Vec<f32> as Clone>::clone(&code_embd[0]));
         c.sparse_embedding = Some(sparse_embd);

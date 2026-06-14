@@ -8,3 +8,4 @@ improvements.md
 *.json
 !report.json
 !evals/configs/*.json
+.DS_Store
