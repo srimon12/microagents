@@ -8,6 +8,8 @@ use std::{
     time::Duration,
 };
 
+use dashmap::DashMap;
+
 use async_stream::stream;
 use chrono::Utc;
 use futures_util::StreamExt;
@@ -134,8 +136,8 @@ impl SupportedProvider {
             // llama3.2 is the most widely tested, hardware-friendly default
             SupportedProvider::Ollama => Ok("llama3.2"),
 
-            // llama-3.3-70b-versatile is Groq's documented default recommendation
-            SupportedProvider::Groq => Ok("llama-3.3-70b-versatile"),
+            // openai/gpt-oss-120b is Groq's documented default recommendation compatible with prompt caching
+            SupportedProvider::Groq => Ok("openai/gpt-oss-120b"),
 
             // Claude Opus 4.7 by Anthropic is cuttig-edge in the models market
             SupportedProvider::OpenRouter => Ok("anthropic/claude-opus-4.7"),
@@ -180,7 +182,6 @@ impl Debug for DebuggableClient {
 ///
 /// Created via [`MicroAgentBuilder`]. Holds the conversation history, tool
 /// registry, and LLM client configuration.
-#[derive(Debug)]
 pub struct MicroAgent<Ctx> {
     pub history: Vec<Message>,
     pub tools: HashMap<String, Arc<dyn ToolFunction<Ctx>>>,
@@ -189,9 +190,29 @@ pub struct MicroAgent<Ctx> {
     pub model: String,
     pub system: String,
     client: Option<DebuggableClient>,
+    /// Per-session clients for OpenRouter so that `x-session-id` is never reused across sessions.
+    pub openrouter_clients: DashMap<String, Arc<DebuggableClient>>,
     pub tool_context: Arc<ToolExecutionContext<Ctx>>,
     pub storage: Box<dyn AgentStorage>,
     pub parallel_tool_calls: bool,
+}
+
+impl<Ctx: Debug> Debug for MicroAgent<Ctx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MicroAgent")
+            .field("history", &self.history)
+            .field("tools", &self.tools)
+            .field("skills", &self.skills)
+            .field("provider", &self.provider)
+            .field("model", &self.model)
+            .field("system", &self.system)
+            .field("client", &self.client)
+            .field("openrouter_clients", &self.openrouter_clients.len())
+            .field("tool_context", &self.tool_context)
+            .field("storage", &self.storage)
+            .field("parallel_tool_calls", &self.parallel_tool_calls)
+            .finish()
+    }
 }
 
 /// Builder for [`MicroAgent`].
@@ -405,6 +426,7 @@ You are {} provided by {}
             model,
             provider: self.provider,
             client: None,
+            openrouter_clients: DashMap::new(),
             system,
             tool_context: self.tool_context,
             storage: self.storage,
@@ -416,16 +438,52 @@ You are {} provided by {}
 impl<Ctx> MicroAgent<Ctx> {
     /// Lazily initialise the LLM client.
     ///
-    /// The client is cached after the first call.
-    fn init_client(&mut self) -> Result<Arc<UltrafastClient>, AgentError> {
-        if let Some(c) = self.client.as_ref() {
+    /// For non-OpenRouter providers the client is cached after the first call.
+    /// For OpenRouter a separate client is created (and cached) per
+    /// `sticky_session_id` so that the `x-session-id` header is never reused
+    /// across sessions.
+    pub fn init_client(
+        &mut self,
+        sticky_session_id: &str,
+    ) -> Result<Arc<UltrafastClient>, AgentError> {
+        if self.provider != SupportedProvider::OpenRouter
+            && let Some(c) = self.client.as_ref()
+        {
             return Ok(c.0.clone());
         }
+
+        if self.provider == SupportedProvider::OpenRouter
+            && let Some(entry) = self.openrouter_clients.get(sticky_session_id)
+        {
+            return Ok(entry.0.clone());
+        }
+
         let mut base_client = UltrafastClient::standalone();
         base_client = match self.provider {
-            SupportedProvider::OpenRouter => {
-                base_client.with_openrouter(env::var("OPENROUTER_API_KEY")?)
-            }
+            SupportedProvider::OpenRouter => base_client.with_provider(
+                "openai",
+                ProviderConfig {
+                    name: "openai".into(),
+                    api_key: env::var("OPENROUTER_API_KEY")?,
+                    base_url: Some("https://openrouter.ai/api/v1".into()),
+                    timeout: Duration::from_secs(300),
+                    max_retries: 3,
+                    retry_delay: Duration::from_millis(500),
+                    rate_limit: None,
+                    model_mapping: HashMap::new(),
+                    headers: HashMap::from([(
+                        "x-session-id".to_string(),
+                        sticky_session_id.to_string(),
+                    )]),
+                    enabled: true,
+                    circuit_breaker: Some(CircuitBreakerConfig {
+                        failure_threshold: 5,
+                        recovery_timeout: Duration::from_secs(30),
+                        request_timeout: Duration::from_secs(10),
+                        half_open_max_calls: 3,
+                    }),
+                },
+            ),
             SupportedProvider::OpenAI => base_client.with_openai(env::var("OPENAI_API_KEY")?),
             SupportedProvider::Groq => base_client.with_groq(env::var("GROQ_API_KEY")?),
             SupportedProvider::OpenAICompatible => base_client.with_provider(
@@ -484,7 +542,16 @@ impl<Ctx> MicroAgent<Ctx> {
             .build()
             .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
         let arcc = Arc::new(client);
-        self.client = Some(DebuggableClient(arcc.clone()));
+
+        if self.provider == SupportedProvider::OpenRouter {
+            self.openrouter_clients.insert(
+                sticky_session_id.to_string(),
+                Arc::new(DebuggableClient(arcc.clone())),
+            );
+        } else {
+            self.client = Some(DebuggableClient(arcc.clone()));
+        }
+
         Ok(arcc)
     }
 }
@@ -546,8 +613,8 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
     /// The stream yields [`StreamChunk`]s that may contain text deltas or
     /// partial tool calls. Higher-level orchestration (e.g. [`run`]) is
     /// responsible for buffering and acting on tool calls.
-    async fn generate(&mut self) -> Result<GenerationStream, AgentError> {
-        let client = self.init_client()?;
+    async fn generate(&mut self, sticky_session_id: &str) -> Result<GenerationStream, AgentError> {
+        let client = self.init_client(sticky_session_id)?;
         let tools: Vec<Tool> = self.tools.values().map(|t| t.to_sdk_tool()).collect();
         let stream = client
             .stream_chat_completion(ChatRequest {
@@ -668,7 +735,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
             yield Ok(user_prompt_submit);
 
             loop {
-                let mut generation = match self.generate().await {
+                let mut generation = match self.generate(&resolved_sid.clone()).await {
                     Ok(g) => g,
                     Err(e) => {
                         yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e)));
@@ -951,7 +1018,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Agent for DummyAgent {
-        async fn generate(&mut self) -> Result<GenerationStream, AgentError> {
+        async fn generate(
+            &mut self,
+            _sticky_session_id: &str,
+        ) -> Result<GenerationStream, AgentError> {
             self.generate_called = true;
             let s = stream! {
                 yield Ok(ultrafast_models_sdk::models::StreamChunk {
@@ -1305,7 +1375,7 @@ mod tests {
         );
         assert_eq!(
             SupportedProvider::Groq.default_model().unwrap(),
-            "llama-3.3-70b-versatile"
+            "openai/gpt-oss-120b"
         );
         assert_eq!(
             SupportedProvider::OpenRouter.default_model().unwrap(),
@@ -1332,14 +1402,14 @@ mod tests {
     async fn test_dummy_agent_generate_sets_flag() {
         let mut agent = DummyAgent::new();
         assert!(!agent.generate_called);
-        let _ = agent.generate().await;
+        let _ = agent.generate("hello").await;
         assert!(agent.generate_called);
     }
 
     #[tokio::test]
     async fn test_dummy_agent_generate_returns_stream() {
         let mut agent = DummyAgent::new();
-        let mut stream = agent.generate().await.unwrap();
+        let mut stream = agent.generate("hello").await.unwrap();
         let item = stream.next().await;
         assert!(item.is_some());
     }
