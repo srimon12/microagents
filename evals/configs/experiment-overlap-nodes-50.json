@@ -38,7 +38,7 @@
   "embedding_model_name": "minishlab/potion-base-8M",
   "ast_chunking_options": {
     "max_nws_size": 1500,
-    "overlap_nodes": 10
+    "overlap_nodes": 50
   },
   "bm25_embedder_options": {
     "k": 1.2,

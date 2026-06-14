@@ -1,4 +1,5 @@
 use ignore::WalkBuilder;
+use indicatif::ProgressIterator;
 use liteparse::{LiteParse, LiteParseConfig};
 use qdrant_edge::{
     AnyVariants, Condition, Distance, EdgeConfig, EdgeShard, EdgeSparseVectorParams,
@@ -22,9 +23,11 @@ use crate::processing::{chunk, embed};
 
 const FILES_INDEX: &str = ".microagents/files_index.json";
 const SHARD_DIRECTORY: &str = ".microagents/vectors";
-pub const VECTORS_NAME: &str = "dense_text";
-pub const SPARSE_VECTORS_NAME: &str = "sparse_text";
-const VECTORS_SIZE: usize = 256;
+pub const VECTORS_NAME: &str = "text";
+pub const CODE_VECTORS_NAME: &str = "code";
+pub const SPARSE_VECTORS_NAME: &str = "sparse";
+const VECTORS_SIZE: usize = 768;
+const CODE_VECTORS_SIZE: usize = 768;
 const INGESTION_CONCURRENCY: usize = 10;
 // OCR is disabled, images are not supported
 pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
@@ -45,18 +48,32 @@ pub fn edge_config() -> &'static EdgeConfig {
         .expect("Should be able to generate quantization config");
         EdgeConfig {
             on_disk_payload: true,
-            vectors: HashMap::from([(
-                VECTORS_NAME.to_string(),
-                EdgeVectorParams {
-                    size: VECTORS_SIZE,
-                    distance: Distance::Cosine,
-                    on_disk: Some(true),
-                    quantization_config: Some(config),
-                    multivector_config: None,
-                    datatype: None,
-                    hnsw_config: None,
-                },
-            )]),
+            vectors: HashMap::from([
+                (
+                    VECTORS_NAME.to_string(),
+                    EdgeVectorParams {
+                        size: VECTORS_SIZE,
+                        distance: Distance::Cosine,
+                        on_disk: Some(true),
+                        quantization_config: Some(config.clone()),
+                        multivector_config: None,
+                        datatype: None,
+                        hnsw_config: None,
+                    },
+                ),
+                (
+                    CODE_VECTORS_NAME.to_string(),
+                    EdgeVectorParams {
+                        size: CODE_VECTORS_SIZE,
+                        distance: Distance::Cosine,
+                        on_disk: Some(true),
+                        quantization_config: Some(config),
+                        multivector_config: None,
+                        datatype: None,
+                        hnsw_config: None,
+                    },
+                ),
+            ]),
             sparse_vectors: HashMap::from([(
                 SPARSE_VECTORS_NAME.to_string(),
                 EdgeSparseVectorParams {
@@ -149,6 +166,7 @@ pub struct EmbeddingPayload {
 #[derive(Debug, Clone)]
 struct EmbeddingWithPayload {
     embedding: Vec<f32>,
+    code_embedding: Vec<f32>,
     sparse_embedding: SparseVector,
     payload: EmbeddingPayload,
 }
@@ -271,6 +289,7 @@ pub fn load_qdrant_edge() -> Result<EdgeShard, Box<dyn std::error::Error>> {
 fn make_point(
     id: uuid::Uuid,
     vector: Vec<f32>,
+    code_vector: Vec<f32>,
     sparse_vector: SparseVector,
     payload: Value,
 ) -> PointStruct {
@@ -279,6 +298,7 @@ fn make_point(
         Vectors::new_named([
             (SPARSE_VECTORS_NAME, Vector::from(sparse_vector)),
             (VECTORS_NAME, Vector::from(vector)),
+            (CODE_VECTORS_NAME, Vector::from(code_vector)),
         ]),
         payload,
     )
@@ -296,6 +316,7 @@ fn upload_embeddings(eps: Vec<EmbeddingWithPayload>) -> Result<(), Box<dyn std::
         let point = make_point(
             uuid::Uuid::new_v4(),
             embd.embedding,
+            embd.code_embedding,
             embd.sparse_embedding,
             payload_json,
         );
@@ -346,6 +367,7 @@ async fn ingest_one(abs_path: &PathBuf) -> Result<Vec<EmbeddingWithPayload>, Str
         embeddings_with_payloads.push(EmbeddingWithPayload {
             embedding: chunk.embedding.unwrap(),
             sparse_embedding: chunk.sparse_embedding.unwrap(),
+            code_embedding: chunk.code_embedding.unwrap(),
             payload: EmbeddingPayload {
                 document_path: abs_path.to_string_lossy().replace('\\', "/"),
                 content: chunk.content,
@@ -381,8 +403,8 @@ async fn ingest_files(to_ingest: HashSet<String>) -> Result<(), Box<dyn std::err
         }
     });
 
-    for fl in to_ingest {
-        let abs_path = root_path.join(&fl);
+    for fl in to_ingest.iter().progress() {
+        let abs_path = root_path.join(fl);
         let permit = semaphore.clone().acquire_owned().await?;
         let tx = tx.clone();
         join_set.spawn(async move {
@@ -501,7 +523,13 @@ pub async fn initialize_environment(
         println!("Applying changes to detected diff files...");
     }
 
+    if verbose && !diff.deleted.is_empty() {
+        println!("Removing deleted files from vector index...")
+    }
     delete_files(diff.to_delete())?;
+    if verbose && !diff.to_reingest().is_empty() {
+        println!("Ingesting changed and added files...")
+    }
     ingest_files(diff.to_reingest()).await?;
     persist_file_changes(files_content)?;
 

@@ -49,5 +49,5 @@
   "rerank_top_n": 5,
   "dense_weight": 0.5,
   "sparse_weight": 0.5,
-  "prefetch_top_n": 30
+  "prefetch_top_n": 50
 }
