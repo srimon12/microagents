@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>microagents — minimal, modular AI-agent framework in Rust</title>
+        <style>
+            :root {
+                --bg: #faf6f1;
+                --bg-elev: #fffdfb;
+                --fg: #2d1f16;
+                --muted: #8c7b6b;
+                --accent: #b85c38;
+                --accent-soft: #d97d54;
+                --mint: #5a7d5a;
+                --lavender: #8b6f47;
+                --yellow: #c9a227;
+                --rose: #a94442;
+                --border: #e8ddd0;
+                --radius: 12px;
+                --font-mono:
+                    "SF Mono", ui-monospace, "Cascadia Code", "Source Code Pro",
+                    Menlo, Consolas, monospace;
+                --font-sans:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    "Helvetica Neue", Arial, sans-serif;
+            }
+
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            html {
+                scroll-behavior: smooth;
+            }
+
+            body {
+                background: var(--bg);
+                color: var(--fg);
+                font-family: var(--font-sans);
+                line-height: 1.6;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            a {
+                color: var(--accent);
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+
+            .container {
+                max-width: 960px;
+                margin: 0 auto;
+                padding: 0 1.5rem;
+            }
+
+            /* Nav */
+            nav {
+                position: sticky;
+                top: 0;
+                z-index: 50;
+                background: var(--bg);
+                backdrop-filter: blur(12px);
+                border-bottom: 1px solid var(--border);
+            }
+            nav .container {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                height: 64px;
+            }
+            nav .brand {
+                font-weight: 700;
+                font-size: 1.1rem;
+                letter-spacing: -0.02em;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+            nav .brand span {
+                color: var(--accent);
+            }
+            nav .links {
+                display: flex;
+                gap: 1.25rem;
+                font-size: 0.9rem;
+            }
+            nav .links a {
+                color: var(--muted);
+            }
+            nav .links a:hover {
+                color: var(--fg);
+            }
+
+            /* Hero */
+            header {
+                padding: 6rem 0 4rem;
+                text-align: center;
+                border-bottom: 1px solid var(--border);
+            }
+            header h1 {
+                font-size: clamp(2.2rem, 5vw, 3.4rem);
+                font-weight: 800;
+                letter-spacing: -0.03em;
+                line-height: 1.1;
+                margin-bottom: 1rem;
+            }
+            header h1 em {
+                font-style: normal;
+                background: linear-gradient(
+                    135deg,
+                    var(--accent),
+                    var(--lavender)
+                );
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
+            header p.lead {
+                font-size: 1.15rem;
+                color: var(--muted);
+                max-width: 560px;
+                margin: 0 auto 2rem;
+            }
+            .badges {
+                display: flex;
+                justify-content: center;
+                gap: 0.6rem;
+                flex-wrap: wrap;
+            }
+            .badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.35rem;
+                padding: 0.35rem 0.7rem;
+                border-radius: 999px;
+                font-size: 0.78rem;
+                font-weight: 600;
+                border: 1px solid var(--border);
+                background: var(--bg-elev);
+                color: var(--muted);
+            }
+            .badge.accent {
+                border-color: rgba(137, 180, 250, 0.25);
+                color: var(--accent);
+            }
+            .badge.mint {
+                border-color: rgba(166, 227, 161, 0.25);
+                color: var(--mint);
+            }
+            .badge.lavender {
+                border-color: rgba(203, 166, 247, 0.25);
+                color: var(--lavender);
+            }
+
+            /* Install */
+            .install {
+                margin-top: 2rem;
+                display: flex;
+                justify-content: center;
+            }
+            .install pre {
+                background: var(--bg-elev);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 0.9rem 1.2rem;
+                font-family: var(--font-mono);
+                font-size: 0.85rem;
+                color: var(--fg);
+                overflow-x: auto;
+                max-width: 100%;
+            }
+            .install code .cmd {
+                color: var(--accent);
+            }
+            .install code .arg {
+                color: var(--lavender);
+            }
+
+            /* Sections */
+            section {
+                padding: 4rem 0;
+                border-bottom: 1px solid var(--border);
+            }
+            section:last-of-type {
+                border-bottom: none;
+            }
+            h2 {
+                font-size: 1.6rem;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+                margin-bottom: 1.25rem;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+            h2 .dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                display: inline-block;
+            }
+
+            /* Cards */
+            .cards {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                gap: 1rem;
+            }
+            .card {
+                background: var(--bg-elev);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 1.25rem;
+                transition:
+                    transform 0.15s ease,
+                    border-color 0.15s ease;
+            }
+            .card:hover {
+                transform: translateY(-2px);
+                border-color: rgba(137, 180, 250, 0.25);
+            }
+            .card h3 {
+                font-size: 1rem;
+                font-weight: 600;
+                margin-bottom: 0.35rem;
+                display: flex;
+                align-items: center;
+                gap: 0.45rem;
+            }
+            .card p {
+                font-size: 0.9rem;
+                color: var(--muted);
+            }
+            .card .icon {
+                font-size: 1.1rem;
+                line-height: 1;
+            }
+
+            /* Architecture */
+            .arch-stack {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+                max-width: 520px;
+                margin: 0 auto;
+            }
+            .arch-layer {
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+                background: var(--bg-elev);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 1rem 1.25rem;
+                transition: border-color 0.15s ease;
+            }
+            .arch-layer:hover {
+                border-color: rgba(137, 180, 250, 0.25);
+            }
+            .arch-box {
+                min-width: 180px;
+            }
+            .arch-name {
+                font-family: var(--font-mono);
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: var(--accent);
+            }
+            .arch-meta {
+                font-family: var(--font-mono);
+                font-size: 0.72rem;
+                color: var(--muted);
+                margin-top: 0.15rem;
+            }
+            .arch-desc {
+                font-size: 0.85rem;
+                color: var(--muted);
+                line-height: 1.4;
+            }
+            .arch-arrow {
+                width: 2px;
+                height: 1.25rem;
+                background: linear-gradient(
+                    to bottom,
+                    var(--border),
+                    var(--accent)
+                );
+                margin: 0 auto;
+                border-radius: 1px;
+                position: relative;
+            }
+            .arch-arrow::after {
+                content: "";
+                position: absolute;
+                bottom: -3px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 0;
+                height: 0;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid var(--accent);
+            }
+
+            /* Code */
+            pre.code {
+                background: var(--bg-elev);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 1.1rem 1.25rem;
+                font-family: var(--font-mono);
+                font-size: 0.82rem;
+                overflow-x: auto;
+                line-height: 1.6;
+            }
+            .code .k {
+                color: var(--lavender);
+            } /* keyword */
+            .code .f {
+                color: var(--accent);
+            } /* function */
+            .code .s {
+                color: var(--mint);
+            } /* string */
+            .code .c {
+                color: var(--muted);
+            } /* comment */
+            .code .t {
+                color: var(--yellow);
+            } /* type */
+
+            /* Table */
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.9rem;
+            }
+            th,
+            td {
+                text-align: left;
+                padding: 0.65rem 0.5rem;
+                border-bottom: 1px solid var(--border);
+            }
+            th {
+                color: var(--muted);
+                font-weight: 500;
+                font-size: 0.8rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            td code {
+                font-family: var(--font-mono);
+                font-size: 0.82rem;
+                background: rgba(137, 180, 250, 0.08);
+                padding: 0.15rem 0.35rem;
+                border-radius: 4px;
+            }
+
+            /* Footer */
+            footer {
+                padding: 3rem 0;
+                text-align: center;
+                color: var(--muted);
+                font-size: 0.85rem;
+            }
+            footer a {
+                color: var(--muted);
+                text-decoration: underline;
+            }
+
+            /* Responsive */
+            @media (max-width: 520px) {
+                header {
+                    padding: 4rem 0 3rem;
+                }
+                .install pre {
+                    font-size: 0.75rem;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <nav>
+            <div class="container">
+                <div class="brand"><span>⚡</span> microagents</div>
+                <div class="links">
+                    <a href="#features">Features</a>
+                    <a href="#architecture">Architecture</a>
+                    <a href="#quickstart">Quick Start</a>
+                    <a href="https://github.com/AstraBert/microagents"
+                        >GitHub</a
+                    >
+                </div>
+            </div>
+        </nav>
+
+        <header>
+            <div class="container">
+                <h1><em>microagents</em></h1>
+                <p class="lead">
+                    A minimal, modular AI-agent framework written in Rust. Small
+                    core, pluggable storage, event-driven architecture, and a
+                    batteries-included TUI.
+                </p>
+                <div class="badges">
+                    <span class="badge mint">Multi-Provider LLMs</span>
+                    <span class="badge accent">Session Persistence</span>
+                    <span class="badge lavender">Skills and Custom Tools</span>
+                    <span class="badge">Open Source (MIT)</span>
+                </div>
+                <div class="install">
+                    <pre><code><span class="cmd">cargo</span> <span class="arg">+nightly install</span> microagents-cli</code></pre>
+                </div>
+            </div>
+        </header>
+
+        <main class="container">
+            <section id="features">
+                <h2>
+                    <span class="dot" style="background: var(--accent)"></span>
+                    Features
+                </h2>
+                <div class="cards">
+                    <div class="card">
+                        <h3>
+                            <span class="icon">🔌</span> Multi-provider LLM
+                            support
+                        </h3>
+                        <p>
+                            OpenAI, OpenRouter, Groq, and Ollama out of the box
+                            via <code>ultrafast-models-sdk</code>.
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">🛠</span> Tool-use loop</h3>
+                        <p>
+                            Agents call tools, wait for results, and continue
+                            the conversation. Parallel tool calls supported.
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">📦</span> Skills</h3>
+                        <p>
+                            Drop-in markdown skill packs with front-matter
+                            loaded from <code>./.agents/skills</code> or
+                            <code>~/.agents/skills</code>.
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">💾</span> Session storage</h3>
+                        <p>
+                            Resume conversations with in-memory, JSONL, or
+                            SQLite backends.
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">🔍</span> Hybrid search</h3>
+                        <p>
+                            Semantic + sparse (BM25) search over your workspace,
+                            powered by Qdrant, fastembed, and astchunk.
+                        </p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">🖥</span> Embedded TUI</h3>
+                        <p>
+                            Ratatui-based chat interface with streaming deltas,
+                            tool-call visualization, and session resume.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="architecture">
+                <h2>
+                    <span
+                        class="dot"
+                        style="background: var(--lavender)"
+                    ></span>
+                    Architecture
+                </h2>
+                <div class="arch-stack">
+                    <div class="arch-layer">
+                        <div class="arch-box">
+                            <div class="arch-name">microagents-cli</div>
+                            <div class="arch-meta">binary: microag</div>
+                        </div>
+                        <div class="arch-desc">
+                            TUI + built-in tools + vector search indexing
+                        </div>
+                    </div>
+                    <div class="arch-arrow"></div>
+                    <div class="arch-layer">
+                        <div class="arch-box">
+                            <div class="arch-name">microagents-core</div>
+                        </div>
+                        <div class="arch-desc">
+                            Agent trait, MicroAgent builder, tool loop, skill
+                            loader
+                        </div>
+                    </div>
+                    <div class="arch-arrow"></div>
+                    <div class="arch-layer">
+                        <div class="arch-box">
+                            <div class="arch-name">microagents-events</div>
+                        </div>
+                        <div class="arch-desc">
+                            Structured events → JSON-RPC notifications
+                        </div>
+                    </div>
+                    <div class="arch-arrow"></div>
+                    <div class="arch-layer">
+                        <div class="arch-box">
+                            <div class="arch-name">microagents-storage</div>
+                        </div>
+                        <div class="arch-desc">
+                            In-memory / JSONL / SQLite session backends
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="quickstart">
+                <h2>
+                    <span class="dot" style="background: var(--mint)"></span>
+                    Quick Start
+                </h2>
+                <p style="color: var(--muted); margin-bottom: 1rem">
+                    Run the TUI with default settings, or customize provider,
+                    model, and storage:
+                </p>
+                <pre class="code"><span class="c"># Default TUI</span>
+<span class="f">microag</span>
+
+<span class="c"># Custom provider &amp; model</span>
+<span class="f">microag</span> <span class="k">--provider</span> ollama <span class="k">--model</span> gemma4:latest <span class="k">--storage</span> sqlite
+
+<span class="c"># Resume a session</span>
+<span class="f">microag</span> <span class="k">--session-id</span> &lt;session-id&gt;
+
+<span class="c"># Headless mode (JSON-RPC output)</span>
+<span class="f">microag</span> <span class="k">-p</span> <span class="s">'Where is AgentStorage defined?'</span>
+
+<span class="c"># Verbose indexing</span>
+<span class="f">microag</span> <span class="k">--verbose</span> <span class="k">-p</span> <span class="s">'Which storage backends implement AgentStorage?'</span></pre>
+            </section>
+
+            <section id="programmatic">
+                <h2>
+                    <span class="dot" style="background: var(--yellow)"></span>
+                    Programmatic Usage
+                </h2>
+                <pre class="code"><span class="k">use</span> microagents_core::{
+    agent::{MicroAgentBuilder, SupportedProvider},
+    types::{Agent, ToolExecutionContext},
+};
+<span class="k">use</span> microagents_storage::types::AgentStorageChoice;
+<span class="k">use</span> std::sync::Arc;
+
+<span class="k">let</span> agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+    .provider(<span class="s">"openrouter"</span>.to_string())?
+    .model(<span class="s">"anthropic/claude-opus-4.7"</span>.to_string())
+    .storage(AgentStorageChoice::Sqlite)
+    .<span class="k">await</span>?
+    .find_skills()?
+    .build()?;
+
+<span class="k">let mut</span> stream = agent.run(<span class="s">"Hello!"</span>.to_string(), <span class="t">None</span>).<span class="k">await</span>?;
+<span class="k">while let</span> <span class="t">Some</span>(event) = stream.next().<span class="k">await</span> { <span class="c">/* … */</span> }</pre>
+            </section>
+
+            <section id="crates">
+                <h2>
+                    <span class="dot" style="background: var(--rose)"></span>
+                    Workspace Crates
+                </h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Crate</th>
+                            <th>Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>microagents-core</code></td>
+                            <td>
+                                Agent definition, tool trait, skill loading, LLM
+                                generation loop
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><code>microagents-events</code></td>
+                            <td>
+                                Event types (<code>AgentEventAny</code>,
+                                <code>SessionInitEvent</code>, …) and JSON-RPC
+                                serialization
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><code>microagents-storage</code></td>
+                            <td>
+                                Session persistence: in-memory, JSONL, or SQLite
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><code>microagents-cli</code></td>
+                            <td>
+                                Interactive terminal UI + built-in tools
+                                (<code>read</code>, <code>write</code>,
+                                <code>edit</code>, <code>shell_execute</code>,
+                                <code>search</code>)
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+        </main>
+
+        <footer>
+            <div class="container">
+                <p>
+                    Made with ❤️ by
+                    <a href="https://clelia.dev">Clelia</a>.
+                </p>
+            </div>
+        </footer>
+    </body>
+</html>
