@@ -1,0 +1,7 @@
+{
+  "question": "What is the total carbon footprint of the company, that is the sum of the scopes 1, 2 and 3 emissions (in TCO2e), for FY2022? If the total value is directly available, provide it instead of calculating the sum.",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/bp-sustainability-report-2023.pdf",
+  "answer": "No single FY2022 Scope 1+2+3 total is explicitly stated in the retrieved passages. Using reported values: Scope 1+2 for 2022 = 31.9 MtCO2e (page 20/21 chart; 30.4 Scope 1 + 1.4 Scope 2), and Scope 3 (aim 2) for 2022 = 307 MtCO2 (page 22/23 table). Sum = 338.9 MtCO2e (≈338,900,000 tCO2e).",
+  "confidence": 72,
+  "reasoning": "The report excerpts show 2022 Scope 1+2 as 31.9 MtCO2e and 2022 Scope 3 (aim 2) as 307 MtCO2, but do not provide a single combined total. Adding these gives 338.9 MtCO2e. Confidence is moderated because Scope 3 here is the report’s aim-2 Scope 3 metric, not necessarily all Scope 3 categories."
+}

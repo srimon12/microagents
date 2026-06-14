@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 90,
+    "reasoning_score": 95,
+    "explanation": "The model correctly identifies that the exact total is not explicitly stated in the text, matching the ground truth. It then provides an estimated calculation using the partial data available, noting the limitations of this calculation."
+  },
+  "gpt_eval": {
+    "answer_score": 55,
+    "reasoning_score": 70,
+    "explanation": "The model correctly states that the total figure isn't directly available, aligned with the ground truth. However, it calculates a sum using possibly partial/incomplete Scope 3 data, which lowers answer accuracy. Reasoning is clear and careful, but the sum may mislead."
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "question": "What is the company's carbon intensity (in TCO2 per million USD) for FY2022? If not available, calculate it by dividing the total carbon emissions by the year's revenue.",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/bp-sustainability-report-2023.pdf",
+  "answer": "Approximately 129 tCO2e per million USD for FY2022, calculated from 2022 total Scope 1+2 emissions of 31.9 MtCO2e (report notes 2022 as 31.9 MtCO2e) divided by 2022 economic value generated of $246.7bn (used as the report’s available revenue-like figure). Calculation: 31.9 MtCO2e / 246.7bn USD × 1,000 = 129 tCO2e per million USD.",
+  "confidence": 62,
+  "reasoning": "The report does not provide a direct FY2022 tCO2 per million USD metric. It does provide 2022 total Scope 1+2 emissions (31.9 MtCO2e) and a 2022 financial denominator ($246.7bn total economic value generated). Using that available denominator yields ~129 tCO2e per million USD."
+}

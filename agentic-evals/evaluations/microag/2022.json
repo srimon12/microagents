@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 0,
+    "reasoning_score": 0,
+    "explanation": "The ground truth states that the requested information is not available in the retrieved context. The model failed by hallucinating a specific list of topics instead of stating that the information is unavailable."
+  },
+  "gpt_eval": {
+    "answer_score": 65,
+    "reasoning_score": 70,
+    "explanation": "The model infers material topics from an ESG index list, but ground truth confirms lack of direct info. Reasoning is plausible if the ESG topics listed are typically material, but may overstate the certainty of materiality without explicit disclosure."
+  }
+}

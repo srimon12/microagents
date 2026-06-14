@@ -1,0 +1,7 @@
+{
+  "question": "Does the company operate in a high emitting sector as of FY2023?",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/Orange 2023 IAR - On track.pdf",
+  "answer": "No clear indication of a high-emitting sector; the report describes Orange as a \"telecommunications network operator\" and focused on a \"future for telecoms\" (pp. around 30 and foreword), which supports that it operates in telecoms rather than a typically high-emitting sector.",
+  "confidence": 72,
+  "reasoning": "The document identifies Orange’s core business as telecoms (\"long-standing telecommunications network operator\"; \"future for telecoms\"). It does not explicitly label the sector as high-emitting. Based on the stated sector in FY2023, the evidence points to telecoms, not an explicitly high-emitting sector."
+}

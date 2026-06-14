@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 10,
+    "reasoning_score": 20,
+    "explanation": "The model attempted to calculate the metric using proxy figures (economic value instead of revenue) and potentially hallucinated data, whereas the ground truth states that this information is not available in the retrieved text."
+  },
+  "gpt_eval": {
+    "answer_score": 50,
+    "reasoning_score": 70,
+    "explanation": "The model correctly calculated the ratio from provided emissions and revenue-like numbers, but used 'total economic value generated' as revenue, which may not be precise. Ground truth was 'not available,' so calculation was a valid attempt."
+  }
+}

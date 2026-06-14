@@ -1,0 +1,7 @@
+{
+  "question": "Does the company operate in a high emitting sector as of FY2023?",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/Microsoft-2024-Environmental-Sustainability-Report.pdf",
+  "answer": "Not available in the retrieved information",
+  "confidence": 83,
+  "reasoning": "The report identifies Microsoft as a “global technology provider” and “leading cloud supplier,” and discusses FY23 emissions (e.g., Scope 3 over 96% and increases tied to datacenter construction materials). However, it does not explicitly classify whether Microsoft’s sector is a “high emitting sector” as of FY2023."
+}

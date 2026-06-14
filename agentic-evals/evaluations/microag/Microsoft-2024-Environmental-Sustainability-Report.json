@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 50,
+    "reasoning_score": 60,
+    "explanation": "The model answered about absolute emissions (Scope 1, 2, and 3) and their drivers, rather than carbon intensity specifically. The ground truth dictates that the report does not specify if carbon intensity changed, which the model failed to note."
+  },
+  "gpt_eval": {
+    "answer_score": 60,
+    "reasoning_score": 70,
+    "explanation": "The model answer provides specific drivers of emissions change (energy procurement, Scope 3 impact), which aligns with broader sustainability efforts. However, the ground truth notes that intensity change per se was not specified in the report, making the answer partially relevant but slightly speculative."
+  }
+}

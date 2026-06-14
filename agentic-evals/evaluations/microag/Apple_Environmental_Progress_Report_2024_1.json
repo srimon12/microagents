@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "The model correctly identified that the information is not available in the retrieved context, matching the ground truth perfectly. Its reasoning explains why this conclusion was reached."
+  },
+  "gpt_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "The answer correctly matches the ground truth, with both stating the information is not available. The reasoning accurately explains that specific sector classification was not found in the retrieved data."
+  }
+}

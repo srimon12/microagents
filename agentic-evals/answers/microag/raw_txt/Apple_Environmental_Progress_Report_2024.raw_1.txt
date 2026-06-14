@@ -1,0 +1,7 @@
+{
+  "question": "Does the company operate in a high emitting sector as of FY2023?",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/Apple_Environmental_Progress_Report_2024.pdf",
+  "answer": "Not available in the retrieved information",
+  "confidence": 23,
+  "reasoning": "The retrieved pages report Apple’s FY2023 emissions and reduction actions (e.g., total footprint, scope breakdowns, supplier energy, materials) but do not explicitly classify Apple’s industry as a “high emitting sector” or provide a sector-ranking label for FY2023."
+}

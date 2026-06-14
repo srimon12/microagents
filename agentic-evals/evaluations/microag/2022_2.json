@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "The model correctly identified that the information is not available in the retrieved data, matching the ground truth exactly, and provided clear reasoning for why it couldn't be calculated."
+  },
+  "gpt_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "Both the model answer and the ground truth correctly state the data is not available. The reasoning is clear, citing lack of necessary information to calculate the carbon intensity in required units."
+  }
+}

@@ -9,3 +9,9 @@ improvements.md
 !report.json
 !evals/configs/*.json
 .DS_Store
+.venv/
+agentic-evals/questions/
+!agentic-evals/evaluations/microag/*.json
+!agentic-evals/answers/microag/*.json
+agentic-evals/data/
+__pycache__/

@@ -1,0 +1,7 @@
+{
+  "question": "Does the company have a decarbonization trajectory compatible with a 1.5 or 2 degree scenario?",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/bp-sustainability-report-2023.pdf",
+  "answer": "Yes, according to the company’s own disclosures. The report says its strategy is designed to be resilient to scenarios “consistent with well-below 2°C and 1.5°C outcomes,” and that its resilience testing reinforced confidence in this. It also states bp believes its net zero ambition and aims “set out a path… consistent with the goals of the Paris Agreement.”",
+  "confidence": 90,
+  "reasoning": "The document explicitly links bp’s strategy and net-zero aims to Paris alignment and to scenario testing against WBCSD pathways classified as well-below 2°C and 1.5°C. This supports compatibility as a stated company position, though it is self-reported."
+}

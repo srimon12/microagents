@@ -1,0 +1,7 @@
+{
+  "question": "What drove carbon intensity change as of the FY2023 for the company?",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/Microsoft-2024-Environmental-Sustainability-Report.pdf",
+  "answer": "As of FY23, Microsoft says the improvement in its operational carbon profile (Scope 1+2 down 6% since 2020) was driven by clean energy procurement, green tariff programs, and unbundled renewable energy certificates. At the same time, total emissions rose (up 29.1% vs. 2020 baseline) as Microsoft invested in new infrastructure, with Scope 3 (>96% of total) remaining the main pressure from supply chain, hardware lifecycle, and other indirect sources.",
+  "confidence": 83,
+  "reasoning": "The report explicitly states: Scope 1+2 decrease was “driven by… clean energy procurement, green tariff programs, and… renewable energy certificates” (FY23 section). It also states overall emissions increased 29.1% due to infrastructure investment and that Scope 3 (>96%) dominates, indicating the key drivers of net carbon-intensity-related change."
+}

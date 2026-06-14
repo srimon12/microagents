@@ -1,0 +1,7 @@
+{
+  "question": "What is the company's carbon intensity (in TCO2 per million USD) for FY2023? If not available, calculate it by dividing the total carbon emissions by the year's revenue.",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/Apple_Environmental_Progress_Report_2024.pdf",
+  "answer": "Not stated directly. Calculated for FY2023 as 42.0 tCO2e per million USD, using total gross carbon footprint 16,100,000 metric tons CO2e (Data > Greenhouse gas emissions: “Total gross carbon footprint … 16,100,000”) divided by net sales 383,285 million USD (Data > Normalizing factors: “Net sales … 383,285”).",
+  "confidence": 96,
+  "reasoning": "The report provides FY2023 total gross carbon footprint (16.1M tCO2e) and FY2023 net sales (383,285 million USD), but no explicit intensity metric. Dividing 16,100,000 by 383,285 gives 42.005, i.e., 42.0 tCO2e per million USD."
+}

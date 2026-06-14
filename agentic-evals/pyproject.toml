@@ -1,0 +1,24 @@
+[build-system]
+requires = ["uv_build>=0.10.8,<0.11"]
+build-backend = "uv_build"
+
+[project]
+name = "agentic-evals"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "huggingface-hub>=1.17.0",
+    "numpy>=2.4.6",
+    "openrouter>=0.9.1",
+    "pydantic>=2.13.4",
+    "rich>=15.0.0",
+]
+
+[project.scripts]
+download-data = "agentic_evals.download_data:main"
+download-qa = "agentic_evals.download_qa:main"
+run-microag = "agentic_evals.run_microag:main"
+trace-analyzer = "agentic_evals.analysis.trace:main"
+judge-answers = "agentic_evals.analysis.judge:main"

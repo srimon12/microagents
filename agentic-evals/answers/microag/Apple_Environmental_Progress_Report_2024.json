@@ -1,0 +1,7 @@
+{
+  "question": "According to the company's Disclosure from FY2023, which topics have been assessed to be material?",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/Apple_Environmental_Progress_Report_2024.pdf",
+  "answer": "Not available in the retrieved information",
+  "confidence": 14,
+  "reasoning": "I reviewed the provided PDF and searched for passages mentioning “Disclosure from FY2023,” “material topics,” and similar terms (e.g., materiality, assessed to be material). The retrieved content does not include a section listing FY2023 material topics."
+}

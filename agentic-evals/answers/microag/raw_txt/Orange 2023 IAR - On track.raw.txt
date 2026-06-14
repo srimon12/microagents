@@ -1,0 +1,7 @@
+{
+  "question": "According to the company's Disclosure from FY2023, which topics have been assessed to be material?",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/Orange 2023 IAR - On track.pdf",
+  "answer": "Not available in the retrieved information",
+  "confidence": 28,
+  "reasoning": "The PDF states that the 2023 double materiality analysis identified 25 issues, including 12 material issues “found in the dark orange section” of the matrix (p.13/line ~752). However, the extracted text does not specify which named topics are in that dark-orange subset, so the material topics cannot be reliably listed from retrieved text alone."
+}

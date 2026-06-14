@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "The model answer is excellent. It covers all the key decarbonization levers mentioned in the ground truth (renewables, energy efficiency, circular economy, eco-design) and provides even more specific, accurate details (like the Green ITN program and the 'Re' program)."
+  },
+  "gpt_eval": {
+    "answer_score": 90,
+    "reasoning_score": 95,
+    "explanation": "The model accurately identifies major decarbonization levers—renewables, circular economy, eco-design, and supplier decarbonization—matching the ground truth. Some details differ slightly, but overall coverage and clarity are excellent."
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "question": "According to the company's Disclosure from FY2021, which topics have been assessed to be material?",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/2022.pdf",
+  "answer": "The material topics are the ESG aspects listed in the report’s ESG Index (pp. 80–83): Emissions (A1), Resources Utilization (A2), Environment and Natural Resources (A3), Employment (B1), Health and Safety (B2), Development and Training (B3), Labor Standards (B4), Supply Chain Management (B5), Product Responsibility (B6), Anti-corruption (B7), and Community Investment (B8).",
+  "confidence": 72,
+  "reasoning": "In the ESG Index pages, the table explicitly lists Level A1–A3 and Level B1–B8 topic categories, which are presented as the report’s material ESG disclosure topics tied to prior-year (FY2021) disclosure alignment."
+}

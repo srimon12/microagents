@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "The model correctly identified that the information is not available in the retrieved text, matching the ground truth exactly, and provided sound reasoning."
+  },
+  "gpt_eval": {
+    "answer_score": 100,
+    "reasoning_score": 95,
+    "explanation": "The model answer matches the ground truth, accurately reflecting that the information is not available. The reasoning is clear and shows careful consideration; a minor deduction for verbosity but overall very good."
+  }
+}

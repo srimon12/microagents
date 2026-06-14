@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "The model successfully followed the instructions in the prompt to calculate the carbon intensity of 42.0 TCO2 per million USD since it was not explicitly available, whereas the ground truth simply stated it was not available."
+  },
+  "gpt_eval": {
+    "answer_score": 80,
+    "reasoning_score": 90,
+    "explanation": "Model successfully calculated carbon intensity using data from the report, even though not directly provided. The calculation matches the required method. However, the confidence could be lower due to possible data uncertainty or detail not in the ground truth."
+  }
+}

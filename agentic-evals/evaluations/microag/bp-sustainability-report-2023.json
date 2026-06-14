@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 0,
+    "reasoning_score": 0,
+    "explanation": "The ground truth states that this information is not available in the retrieved documents, whereas the model provided a detailed affirmative answer citing bp's strategy, which contradicts the ground truth."
+  },
+  "gpt_eval": {
+    "answer_score": 30,
+    "reasoning_score": 50,
+    "explanation": "The model confidently provides a detailed answer based on company disclosures, but the ground truth indicates no information is available. The reasoning is logical if based on provided disclosures, but conflicts with the absence in ground truth."
+  }
+}

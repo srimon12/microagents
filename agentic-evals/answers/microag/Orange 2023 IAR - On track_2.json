@@ -1,0 +1,7 @@
+{
+  "question": "Has the company identified significant decarbonization levers ? If yes, detail them.",
+  "file_path": "/Users/clee/Desktop/devrel/benchmark-claude-pdfs/data/Orange 2023 IAR - On track.pdf",
+  "answer": "Yes. Orange identifies several major decarbonization levers: (1) improving energy efficiency of networks/IT via the Green ITN program (network modernization, active sharing, standby modes, AI, and legacy shutdown such as copper/2G/3G); (2) increasing renewable electricity through PPAs, site solarization and solar farms (targeting 75% renewable electricity in Europe by 2025); (3) circular economy actions (eco-design, repair/reuse, collection and recycling of devices via the Re program); (4) supplier/value-chain decarbonization using CSR criteria and SBTi-aligned suppliers; and (5) financing natural carbon sinks for residual emissions. These are explicitly described in the Environment and business model sections.",
+  "confidence": 96,
+  "reasoning": "The report explicitly states Orange’s net-zero 2040 strategy and details concrete levers: Green ITN energy savings, renewables (PPAs/solarization), circular economy and device collection, supplier decarbonization (SBTi/CSR criteria), and carbon-sink financing. These are direct passages from pages on Environment, business model, and non-financial performance."
+}

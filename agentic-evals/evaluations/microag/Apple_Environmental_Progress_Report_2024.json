@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 0,
+    "reasoning_score": 50,
+    "explanation": "The model failed to provide the correct answer, stating that the information was not available in its context. While its reasoning correctly identifies the limitation of its retrieved text, the actual question remains completely unanswered."
+  },
+  "gpt_eval": {
+    "answer_score": 10,
+    "reasoning_score": 30,
+    "explanation": "The model answer admits it could not find the necessary information. While this avoids giving false content, it misses directly available material topics from the ground truth. Reasoning is methodical but incomplete in coverage, earning a low score."
+  }
+}

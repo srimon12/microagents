@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 90,
+    "reasoning_score": 90,
+    "explanation": "The model correctly notes that there is no clear indication in the report, which matches the ground truth. It provides helpful context by identifying the company (Orange) as a telecom operator, which is not typically classified as a high-emitting sector."
+  },
+  "gpt_eval": {
+    "answer_score": 95,
+    "reasoning_score": 90,
+    "explanation": "The model correctly identifies the company as operating in telecoms and notes there is no explicit evidence of it being a high-emitting sector. The answer aligns with the ground truth, which says info is unavailable, and the reasoning is precise."
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "The model correctly identified that the information about compatibility with a 1.5 or 2 degree scenario was not available in the text, which perfectly aligns with the ground truth stating that the report does not explicitly reference or present such a trajectory."
+  },
+  "gpt_eval": {
+    "answer_score": 95,
+    "reasoning_score": 95,
+    "explanation": "The model accurately identifies that there is no explicit reference to a 1.5°C or 2°C trajectory in the available information, aligning with the ground truth. The reasoning is thorough and confidence level is justified."
+  }
+}

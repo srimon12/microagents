@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "The model correctly identified that the numerical greenhouse gas emissions data is not available in the retrieved text, matching the ground truth exactly, and provided an accurate reasoning for why it couldn't be calculated."
+  },
+  "gpt_eval": {
+    "answer_score": 100,
+    "reasoning_score": 100,
+    "explanation": "Both the answer and reasoning are accurate: the FY2023 TCO2e values for each scope are not available in the retrieved info. The reasoning justifies this well, referencing only relative shares and pointing out the missing absolute numbers."
+  }
+}

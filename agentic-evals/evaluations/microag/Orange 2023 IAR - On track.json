@@ -1,0 +1,12 @@
+{
+  "gemini_eval": {
+    "answer_score": 0,
+    "reasoning_score": 0,
+    "explanation": "The model was unable to provide the answer, stating that the information was not available in its retrieved text, whereas the correct material topics are listed in the ground truth."
+  },
+  "gpt_eval": {
+    "answer_score": 10,
+    "reasoning_score": 50,
+    "explanation": "The answer is factually incorrect since the topics are listed explicitly in the ground truth. The reasoning accurately explains the model's basis but overlooks the provided ground truth data, so partial credit for reasoning only."
+  }
+}
