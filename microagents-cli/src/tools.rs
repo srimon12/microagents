@@ -177,7 +177,7 @@ impl ToolFunction<()> for SearchTool {
                 .filter_map(|v| v.as_str())
                 .map(|s| {
                     std::fs::canonicalize(s)
-                        .map(|p| p.to_string_lossy().to_string())
+                        .map(|p| p.to_string_lossy().replace('\\', "/").to_string())
                         .unwrap_or_else(|_| s.to_string())
                 })
                 .collect()
