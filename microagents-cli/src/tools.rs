@@ -174,7 +174,12 @@ impl ToolFunction<()> for SearchTool {
         };
         let document_paths: Option<Vec<String>> = input["document_paths"].as_array().map(|arr| {
             arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .filter_map(|v| v.as_str())
+                .map(|s| {
+                    std::fs::canonicalize(s)
+                        .map(|p| p.to_string_lossy().replace('\\', "/").to_string())
+                        .unwrap_or_else(|_| s.to_string())
+                })
                 .collect()
         });
         let limit = input["limit"].as_u64().map(|l| l as usize);
