@@ -241,7 +241,7 @@ impl<Ctx: Debug> Debug for MicroAgent<Ctx> {
 /// use microagents_core::types::ToolExecutionContext;
 ///
 /// let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-///     .provider("openai".into()).unwrap()
+///     .provider("openai".to_string()).unwrap()
 ///     .model("gpt-5.5".into())
 ///     .build()
 ///     .expect("API key must be set");
