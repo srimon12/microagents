@@ -8,7 +8,7 @@ use microagents_events::types::AgentEvent;
 use microagents_storage::types::AgentStorageChoice;
 use std::{str::FromStr, sync::Arc};
 
-use crate::init_env::initialize_environment;
+use crate::init_env::{infer_provider_from_env, initialize_environment};
 
 mod init_env;
 mod processing;
@@ -84,17 +84,35 @@ async fn build_agent(
     model: Option<String>,
     storage: Option<String>,
     skills: Vec<String>,
+    verbose: bool,
 ) -> Result<microagents_core::agent::MicroAgent<()>, AgentError> {
     let st = storage_choice(storage);
-    let prov = SupportedProvider::from_str(&provider.clone().unwrap_or("openrouter".to_string()))
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
+    let mut is_inferred = false;
+    let prov = match provider {
+        None => {
+            if verbose {
+                println!(
+                    "LLM Provider not specified, trying to infer based on set environment variables"
+                );
+            }
+            is_inferred = true;
+            infer_provider_from_env()?
+        }
+        Some(p) => SupportedProvider::from_str(&p)?,
+    };
+    if is_inferred && verbose {
+        println!(
+            "Inferred provider, based on available environment variables: {}",
+            prov
+        );
+    }
     let resolved_model = match model {
         Some(model) => model,
         None => prov.default_model()?.to_string(),
     };
     let base_builder = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()))
         .model(resolved_model)
-        .provider(provider.unwrap_or("openrouter".into()))?
+        .provider(prov)?
         .storage(st)
         .await?
         .add_tool(Arc::new(tools::WriteTool))?
@@ -119,7 +137,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     if let Some(p) = args.prompt {
         initialize_environment(args.verbose).await?;
-        let agent = build_agent(args.provider, args.model, args.storage, args.skill).await?;
+        let agent = build_agent(
+            args.provider,
+            args.model,
+            args.storage,
+            args.skill,
+            args.verbose,
+        )
+        .await?;
         let mut stream = agent
             .run(p, args.session_id)
             .await
@@ -158,7 +183,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let skill_c = args.skill.clone();
             let storage_c = args.storage.clone();
             async move {
-                let agent = build_agent(prov_c, model_c, storage_c, skill_c).await?;
+                // Building for TUI, verbose should always be true (as above)
+                let agent = build_agent(prov_c, model_c, storage_c, skill_c, true).await?;
                 agent.run(prompt, session_id).await
             }
         },

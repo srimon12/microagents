@@ -63,7 +63,7 @@ async fn test_microagent_integration() {
     }
     let agent = MicroAgentBuilder::<()>::new(ToolExecutionContext::<()>::new(()))
         .model("gpt-5.1".into())
-        .provider("openai".into())
+        .provider("openai".to_string())
         .expect("Should load provider")
         .custom_instructions("Always call the weather_tool when asked about the weather".into())
         .add_tool(Arc::new(WeatherTool))
@@ -139,7 +139,7 @@ fn test_sticky_sessions() {
     }
     let mut agent = MicroAgentBuilder::<()>::new(ToolExecutionContext::<()>::new(()))
         .model("openrouter/owl-alpha".into())
-        .provider("openrouter".into())
+        .provider("openrouter".to_string())
         .expect("Should load provider")
         .build()
         .expect("Should be able to build the agent");
