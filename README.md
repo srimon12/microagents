@@ -18,6 +18,7 @@ A minimal, modular AI-agent framework written in Rust. It provides a small core 
 - **Multi-provider LLM support** — OpenAI (and chat completions-compatible providers), OpenRouter, Groq and Ollama out of the box (via `ultrafast-models-sdk`).
 - **Tool-use loop** — the agent can call tools, wait for results, and continue the conversation. Supports parallel tool calls.
 - **Skills** — drop-in markdown skill packs with front-matter (`name`, `description`, `allowed-tools`, …) loaded from `./.agents/skills` or `~/.agents/skills`.
+- **AGENTS.md** — Load an AGENTS.md as part of your agent's custom instructions
 - **Session storage** — resume conversations by persisting events to JSONL files, SQLite, or keep them in memory (not recommended).
 - **Built-in tools for `microagents-cli`**
   - `read` — read plain text or extract text from PDFs / Office docs / images (via `liteparse`).
@@ -73,6 +74,14 @@ Run in verbose mode to see codebase indexing progression:
 microag --verbose -p 'Where is AgentStorage defined and which storage backends implement it?'
 ```
 
+Infer provider from the environment:
+
+```bash
+export OPENROUTER_API_KEY="..."
+# uses OpenRouter automatically
+microag --model "anthropic/claude-opus-4.6"
+```
+
 ## Architecture overview
 
 ```
@@ -120,6 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .storage(AgentStorageChoice::Sqlite)
         .await?
         .find_skills()?
+        .load_agents_md()?
         .build()?;
 
     let mut stream = agent.run("Hello!".to_string(), None).await?;
