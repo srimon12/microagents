@@ -84,28 +84,12 @@ async fn build_agent(
     model: Option<String>,
     storage: Option<String>,
     skills: Vec<String>,
-    verbose: bool,
 ) -> Result<microagents_core::agent::MicroAgent<()>, AgentError> {
     let st = storage_choice(storage);
-    let mut is_inferred = false;
     let prov = match provider {
-        None => {
-            if verbose {
-                println!(
-                    "LLM Provider not specified, trying to infer based on set environment variables"
-                );
-            }
-            is_inferred = true;
-            infer_provider_from_env()?
-        }
+        None => infer_provider_from_env()?,
         Some(p) => SupportedProvider::from_str(&p)?,
     };
-    if is_inferred && verbose {
-        println!(
-            "Inferred provider, based on available environment variables: {}",
-            prov
-        );
-    }
     let resolved_model = match model {
         Some(model) => model,
         None => prov.default_model()?.to_string(),
@@ -137,14 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     if let Some(p) = args.prompt {
         initialize_environment(args.verbose).await?;
-        let agent = build_agent(
-            args.provider,
-            args.model,
-            args.storage,
-            args.skill,
-            args.verbose,
-        )
-        .await?;
+        let agent = build_agent(args.provider, args.model, args.storage, args.skill).await?;
         let mut stream = agent
             .run(p, args.session_id)
             .await
@@ -184,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let storage_c = args.storage.clone();
             async move {
                 // Building for TUI, verbose should always be true (as above)
-                let agent = build_agent(prov_c, model_c, storage_c, skill_c, true).await?;
+                let agent = build_agent(prov_c, model_c, storage_c, skill_c).await?;
                 agent.run(prompt, session_id).await
             }
         },
