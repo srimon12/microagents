@@ -8,7 +8,7 @@ use microagents_events::types::AgentEvent;
 use microagents_storage::types::AgentStorageChoice;
 use std::{str::FromStr, sync::Arc};
 
-use crate::init_env::initialize_environment;
+use crate::init_env::{infer_provider_from_env, initialize_environment};
 
 mod init_env;
 mod processing;
@@ -86,15 +86,17 @@ async fn build_agent(
     skills: Vec<String>,
 ) -> Result<microagents_core::agent::MicroAgent<()>, AgentError> {
     let st = storage_choice(storage);
-    let prov = SupportedProvider::from_str(&provider.clone().unwrap_or("openrouter".to_string()))
-        .map_err(|e| AgentError::ClientInitFailed(e.to_string()))?;
+    let prov = match provider {
+        None => infer_provider_from_env()?,
+        Some(p) => SupportedProvider::from_str(&p)?,
+    };
     let resolved_model = match model {
         Some(model) => model,
         None => prov.default_model()?.to_string(),
     };
     let base_builder = MicroAgentBuilder::<()>::new(ToolExecutionContext::new(()))
         .model(resolved_model)
-        .provider(provider.unwrap_or("openrouter".into()))?
+        .provider(prov)?
         .storage(st)
         .await?
         .add_tool(Arc::new(tools::WriteTool))?
@@ -158,6 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let skill_c = args.skill.clone();
             let storage_c = args.storage.clone();
             async move {
+                // Building for TUI, verbose should always be true (as above)
                 let agent = build_agent(prov_c, model_c, storage_c, skill_c).await?;
                 agent.run(prompt, session_id).await
             }

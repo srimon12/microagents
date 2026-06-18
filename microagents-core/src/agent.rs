@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     env::{self},
     fmt::{self, Debug},
-    fs,
+    fs, io,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -36,7 +36,7 @@ use ultrafast_models_sdk::{
 use crate::{
     common::{
         JsonResult, call_tool, check_env_var, convert_event_to_message, estimate_tokens,
-        parse_json_fragment,
+        load_agents_md, parse_json_fragment,
     },
     skills::{self, ensure_skill, find_skills, parse_skill},
     types::{Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction},
@@ -99,6 +99,16 @@ pub enum SupportedProvider {
     OpenAICompatible,
 }
 
+pub trait AsProvider {
+    fn as_provider(&self) -> Result<SupportedProvider, MicroAgentBuilderError>;
+}
+
+impl AsProvider for SupportedProvider {
+    fn as_provider(&self) -> Result<SupportedProvider, MicroAgentBuilderError> {
+        Ok(self.to_owned())
+    }
+}
+
 impl FromStr for SupportedProvider {
     type Err = MicroAgentBuilderError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -110,6 +120,12 @@ impl FromStr for SupportedProvider {
             "openai-compatible" => Ok(Self::OpenAICompatible),
             _ => Err(MicroAgentBuilderError::ProviderNotSupported(s.into())),
         }
+    }
+}
+
+impl AsProvider for String {
+    fn as_provider(&self) -> Result<SupportedProvider, MicroAgentBuilderError> {
+        SupportedProvider::from_str(self)
     }
 }
 
@@ -167,6 +183,8 @@ pub enum MicroAgentBuilderError {
     EnvVarNotFoundError(String),
     #[error("Provider {0} should specify a model")]
     ModelNotSpecifiedError(String),
+    #[error(transparent)]
+    AgentsMdResolutionError(#[from] io::Error),
 }
 
 /// Newtype wrapper so that [`UltrafastClient`] can implement [`Debug`].
@@ -223,7 +241,7 @@ impl<Ctx: Debug> Debug for MicroAgent<Ctx> {
 /// use microagents_core::types::ToolExecutionContext;
 ///
 /// let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-///     .provider("openai".into()).unwrap()
+///     .provider("openai".to_string()).unwrap()
 ///     .model("gpt-5.5".into())
 ///     .build()
 ///     .expect("API key must be set");
@@ -283,8 +301,8 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     }
 
     /// Set the LLM provider (e.g. `"openai"`, `"groq"`, `"ollama"`).
-    pub fn provider(mut self, provider: String) -> Result<Self, MicroAgentBuilderError> {
-        let prov = SupportedProvider::from_str(&provider)?;
+    pub fn provider(mut self, provider: impl AsProvider) -> Result<Self, MicroAgentBuilderError> {
+        let prov = provider.as_provider()?;
         self.provider = prov;
         Ok(self)
     }
@@ -333,6 +351,12 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     pub fn custom_instructions(mut self, instructions: String) -> Self {
         self.custom_instructions = instructions;
         self
+    }
+
+    pub fn load_agents_md(mut self) -> Result<Self, MicroAgentBuilderError> {
+        let instructions = load_agents_md()?;
+        self.custom_instructions += &instructions;
+        Ok(self)
     }
 
     /// Choose the effective model: user-supplied or provider default.
@@ -1124,7 +1148,7 @@ mod tests {
     #[test]
     fn test_builder_provider_sets_provider() {
         let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("groq".into())
+            .provider("groq".to_string())
             .unwrap();
         assert_eq!(builder.provider, SupportedProvider::Groq);
     }
@@ -1132,7 +1156,7 @@ mod tests {
     #[test]
     fn test_builder_provider_invalid_returns_error() {
         let result =
-            MicroAgentBuilder::new(ToolExecutionContext::new(())).provider("unknown".into());
+            MicroAgentBuilder::new(ToolExecutionContext::new(())).provider("unknown".to_string());
         assert!(result.is_err());
         assert!(
             matches!(
@@ -1141,6 +1165,14 @@ mod tests {
             ),
             "expected ProviderNotSupported error"
         );
+    }
+
+    #[test]
+    fn test_builder_with_supported_provider_as_enum() {
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
+            .provider(SupportedProvider::Ollama)
+            .unwrap();
+        assert_eq!(builder.provider, SupportedProvider::Ollama);
     }
 
     #[test]
@@ -1207,7 +1239,7 @@ mod tests {
     #[test]
     fn test_build_sets_empty_history() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("ollama".into())
+            .provider("ollama".to_string())
             .unwrap()
             .build()
             .expect("Should be able to build the agent");
@@ -1217,7 +1249,7 @@ mod tests {
     #[test]
     fn test_build_sets_tools_on_agent() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("ollama".into())
+            .provider("ollama".to_string())
             .unwrap()
             .add_tool(Arc::new(DummyTool))
             .unwrap()
@@ -1229,7 +1261,7 @@ mod tests {
     #[test]
     fn test_build_sets_provider_on_agent() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("ollama".into())
+            .provider("ollama".to_string())
             .unwrap()
             .build()
             .expect("Should be able to build the agent");
@@ -1239,7 +1271,7 @@ mod tests {
     #[test]
     fn test_build_sets_model_on_agent() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("ollama".into())
+            .provider("ollama".to_string())
             .unwrap()
             .model("llama3.2".into())
             .build()
@@ -1250,7 +1282,7 @@ mod tests {
     #[test]
     fn test_build_sets_parallel_tool_calls_on_agent() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("ollama".into())
+            .provider("ollama".to_string())
             .unwrap()
             .parallel_tool_calls(true)
             .build()
@@ -1261,7 +1293,7 @@ mod tests {
     #[test]
     fn test_build_system_prompt_contains_base() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("ollama".into())
+            .provider("ollama".to_string())
             .unwrap()
             .build()
             .expect("Should be able to build the agent");
@@ -1271,7 +1303,7 @@ mod tests {
     #[test]
     fn test_build_system_prompt_contains_tools() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("ollama".into())
+            .provider("ollama".to_string())
             .unwrap()
             .add_tool(Arc::new(DummyTool))
             .unwrap()
@@ -1300,7 +1332,7 @@ mod tests {
     #[test]
     fn test_build_system_prompt_contains_custom_model_when_set() {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("ollama".into())
+            .provider("ollama".to_string())
             .unwrap()
             .model("custom-model".into())
             .build()
@@ -1312,7 +1344,7 @@ mod tests {
     #[test]
     fn test_agent_fails_to_build_if_not_api_key() {
         let result = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .provider("groq".into())
+            .provider("groq".to_string())
             .unwrap()
             .build();
         assert!(result.is_err_and(|e| matches!(e, MicroAgentBuilderError::EnvVarNotFoundError(_))));

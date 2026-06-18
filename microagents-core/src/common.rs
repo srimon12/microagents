@@ -1,6 +1,6 @@
-use std::sync::Arc;
 #[cfg(feature = "token_estimation")]
 use std::sync::OnceLock;
+use std::{fs, sync::Arc};
 
 use microagents_events::{AgentEventAny, types::ToolResult};
 use serde_json::Value;
@@ -9,14 +9,19 @@ use ultrafast_models_sdk::{
     models::{FunctionCall, ToolCall},
 };
 
-use crate::types::{AgentError, ToolExecutionContext, ToolFunction};
+use crate::{
+    agent::MicroAgentBuilderError,
+    types::{AgentError, ToolExecutionContext, ToolFunction},
+};
+
+const AGENTS_MD: &str = "AGENTS.md";
 
 #[cfg(feature = "token_estimation")]
-static TOKENIZER: OnceLock<Result<tokie::Tokenizer, tokie::HubError>> = OnceLock::new();
+pub static TOKENIZER: OnceLock<Result<tokie::Tokenizer, tokie::HubError>> = OnceLock::new();
 
 #[cfg(feature = "token_estimation")]
-fn tokenizer() -> &'static Result<tokie::Tokenizer, tokie::HubError> {
-    TOKENIZER.get_or_init(|| tokie::Tokenizer::from_pretrained("gpt2"))
+pub fn tokenizer() -> &'static Result<tokie::Tokenizer, tokie::HubError> {
+    TOKENIZER.get_or_init(|| tokie::Tokenizer::from_pretrained("codellama/CodeLlama-7b-hf"))
 }
 
 /// Verify that an environment variable is set.
@@ -146,6 +151,11 @@ pub fn estimate_tokens(_text: &str) -> Result<usize, AgentError> {
     {
         Ok(0)
     }
+}
+
+pub fn load_agents_md() -> Result<String, MicroAgentBuilderError> {
+    let content = fs::read_to_string(AGENTS_MD)?;
+    Ok(content)
 }
 
 #[cfg(test)]
@@ -399,5 +409,13 @@ mod tests {
     fn test_estimate_tokens() {
         let count = estimate_tokens("hello world").expect("Should be able to estimate tokens");
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_load_agents_md() {
+        let instr = "you are a helpful assistant";
+        fs::write(AGENTS_MD, instr).expect("Should be able to write file");
+        let loaded = load_agents_md().expect("Should be able to load AGENTS.md content");
+        assert_eq!(loaded, instr);
     }
 }

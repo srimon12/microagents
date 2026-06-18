@@ -1,6 +1,9 @@
 use ignore::WalkBuilder;
 use indicatif::ProgressIterator;
 use liteparse::{LiteParse, LiteParseConfig};
+use microagents_core::agent::SupportedProvider;
+use microagents_core::common::tokenizer;
+use microagents_core::types::AgentError;
 use qdrant_edge::{
     AnyVariants, Condition, Distance, EdgeConfig, EdgeShard, EdgeSparseVectorParams,
     EdgeVectorParams, FieldCondition, Filter, HnswIndexConfig, JsonPath, Match, PointId,
@@ -13,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::SystemTime;
@@ -33,6 +37,13 @@ const INGESTION_CONCURRENCY: usize = 10;
 pub const SUPPORTED_LIT_EXTENSIONS: &[&str] = &[
     ".pdf", ".doc", ".docx", ".docm", ".odt", ".rtf", ".ppt", ".pptx", ".pptm", ".odp", ".xls",
     ".xlsx", ".xlsm", ".ods", ".csv", ".tsv",
+];
+pub const SUPPORT_ENV_VARIABLES: &[(&str, &str, &str)] = &[
+    ("OPENROUTER_API_KEY", "", "openrouter"),
+    ("OPENAI_API_KEY", "OPENAI_BASE_URL", "openai-compatible"),
+    ("OPENAI_API_KEY", "", "openai"),
+    ("GROQ_API_KEY", "", "groq"),
+    ("", "OLLAMA_BASE_URL", "ollama"),
 ];
 static EDGE_CONFIG: OnceLock<EdgeConfig> = OnceLock::new();
 pub static PARSER_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
@@ -487,6 +498,34 @@ fn delete_files(to_delete: HashSet<String>) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
+pub fn infer_provider_from_env() -> Result<SupportedProvider, AgentError> {
+    for (api_key, base_url, provider_name) in SUPPORT_ENV_VARIABLES {
+        if !base_url.is_empty() {
+            match std::env::var(base_url) {
+                Ok(_) => {
+                    if !api_key.is_empty() {
+                        match std::env::var(api_key) {
+                            Ok(_) => return Ok(SupportedProvider::from_str(provider_name)?),
+                            Err(_) => continue,
+                        }
+                    } else {
+                        return Ok(SupportedProvider::from_str(provider_name)?);
+                    }
+                }
+                Err(_) => continue,
+            }
+        } else {
+            match std::env::var(api_key) {
+                Ok(_) => return Ok(SupportedProvider::from_str(provider_name)?),
+                Err(_) => continue,
+            }
+        }
+    }
+    Err(AgentError::ClientInitFailed(
+        "Provider could not be resolved from the environment".to_string(),
+    ))
+}
+
 pub async fn initialize_environment(
     verbose: bool,
 ) -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
@@ -496,6 +535,10 @@ pub async fn initialize_environment(
     }
 
     let _ = edge_config();
+    if verbose {
+        println!("Loading tokenizer for token estimation...");
+    }
+    let _ = tokenizer().as_ref()?;
 
     let files = collect_files()?;
     if verbose {
