@@ -14,12 +14,16 @@
 //! }).await?;
 //! ```
 use std::{
+    cmp::Reverse,
+    collections::HashSet,
     future::Future,
     io::{self, Stdout},
+    path::{Path, PathBuf},
     time::Duration,
 };
 
 use futures_util::StreamExt;
+use ignore::WalkBuilder;
 use microagents_core::types::{AgentError, RunStream};
 use microagents_events::{AgentEventAny, DeltaType, types::ToolResult};
 use ratatui::{
@@ -40,6 +44,150 @@ use ratatui::{
 };
 use tokio::sync::mpsc;
 use unicode_width::UnicodeWidthStr;
+
+/// Characters that delimit tokens for @-mention detection.
+const PATH_DELIMITERS: &[char] = &[' ', '\t', '"', '\'', '='];
+
+/// Check if a character is a path delimiter.
+fn is_path_delimiter(c: char) -> bool {
+    PATH_DELIMITERS.contains(&c)
+}
+
+/// Find the start of the current @-mention token at the given cursor position.
+/// Returns `Some((start_byte_offset, prefix_including_at))` if the cursor is
+/// inside or immediately after an `@` token.
+fn find_at_prefix(input: &str, cursor: usize) -> Option<(usize, String)> {
+    // Find the last delimiter before cursor
+    let before = &input[..cursor];
+    let last_delim = before
+        .rfind(is_path_delimiter)
+        .map(|i| i as isize)
+        .unwrap_or(-1);
+    let start = (last_delim + 1) as usize;
+    let token = &input[start..cursor];
+    if token.starts_with('@') {
+        Some((start, token.to_string()))
+    } else {
+        None
+    }
+}
+
+/// Score a file path against a query (higher = better).
+fn score_entry(name: &str, path: &str, query: &str, is_dir: bool) -> u32 {
+    let ln = name.to_lowercase();
+    let lq = query.to_lowercase();
+    let mut score = 0u32;
+    if ln == lq {
+        score = 100;
+    } else if ln.starts_with(&lq) {
+        score = 80;
+    } else if ln.contains(&lq) {
+        score = 50;
+    } else if path.to_lowercase().contains(&lq) {
+        score = 30;
+    }
+    if is_dir && score > 0 {
+        score += 10;
+    }
+    score
+}
+
+/// Collect fuzzy file suggestions from cwd, respecting .gitignore.
+fn collect_suggestions(cwd: &Path, query: &str) -> Vec<Suggestion> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+
+    // Determine search scope: if query contains '/', scope to that directory.
+    let (base_dir, file_query) = if let Some(slash) = query.rfind('/') {
+        let dir_part = &query[..=slash];
+        let file_part = &query[slash + 1..];
+        let resolved = if dir_part.starts_with("~/") {
+            dirs::home_dir()
+                .map(|h| h.join(&dir_part[2..]))
+                .unwrap_or_else(|| cwd.join(&dir_part[1..]))
+        } else if dir_part.starts_with('/') {
+            PathBuf::from(dir_part)
+        } else {
+            cwd.join(dir_part)
+        };
+        (resolved, file_part)
+    } else {
+        (cwd.to_path_buf(), query)
+    };
+
+    let walker = WalkBuilder::new(&base_dir)
+        .max_depth(Some(6))
+        .hidden(false)
+        .add_custom_ignore_filename(".microagentsignore")
+        .follow_links(false)
+        .build();
+
+    for entry in walker {
+        let Ok(entry) = entry else { continue };
+        let is_dir = entry.file_type().unwrap().is_dir();
+        let name = entry.file_name().to_string_lossy().into_owned();
+
+        // Skip root
+        if entry.depth() == 0 {
+            continue;
+        }
+
+        let rel_path = entry.path().strip_prefix(&base_dir).unwrap_or(entry.path());
+        let display_path = if query.contains('/') {
+            // Preserve the prefix the user typed
+            let prefix_dir = &query[..query.rfind('/').map(|i| i + 1).unwrap_or(0)];
+            if prefix_dir.is_empty() {
+                format!("{}", rel_path.display())
+            } else {
+                format!("{}/{}", prefix_dir, rel_path.display())
+            }
+        } else {
+            format!("{}", rel_path.display())
+        };
+
+        let score = if file_query.is_empty() {
+            1
+        } else {
+            score_entry(&name, &display_path, file_query, is_dir)
+        };
+
+        if score == 0 {
+            continue;
+        }
+
+        let key = entry.path().to_path_buf();
+        if !seen.insert(key) {
+            continue;
+        }
+
+        out.push(Suggestion {
+            name: name.clone(),
+            path: display_path,
+            is_dir,
+            score,
+        });
+    }
+
+    // Sort by score desc, then dirs first, then name
+    out.sort_by_key(|s| (Reverse(s.score), s.is_dir, s.name.clone()));
+    out.truncate(50);
+    out
+}
+
+/// Build the completion value to insert (preserves @, adds quotes if needed).
+fn build_completion_value(path: &str, is_dir: bool, is_quoted: bool) -> String {
+    let needs_quotes = is_quoted || path.contains(' ');
+    let p = if is_dir && !path.ends_with('/') {
+        format!("{}/", path)
+    } else {
+        path.to_string()
+    };
+    if needs_quotes {
+        format!("@\"{}\"", p)
+    } else {
+        format!("@{}", p)
+    }
+}
 
 /// Palette tuned for both light and dark terminals.
 mod theme {
@@ -83,6 +231,34 @@ enum UiEvent {
 const INPUT_MIN_ROWS: u16 = 1;
 const INPUT_MAX_ROWS: u16 = 8;
 
+/// Max visible items in the @-file suggestion popup.
+const SUGGEST_MAX_VISIBLE: usize = 8;
+
+/// A single file/directory suggestion.
+#[derive(Debug, Clone)]
+struct Suggestion {
+    name: String,
+    path: String,
+    is_dir: bool,
+    /// Match score (higher = better).
+    score: u32,
+}
+
+/// State for the @-file suggestion popup.
+#[derive(Debug, Default)]
+struct SuggestState {
+    /// Byte offset in `input` where the prefix starts.
+    start: usize,
+    /// Filtered + scored suggestions.
+    items: Vec<Suggestion>,
+    /// Selected index.
+    selected: usize,
+    /// Whether the popup is active.
+    active: bool,
+    /// Whether the prefix was quoted (e.g. `@"src`).
+    is_quoted: bool,
+}
+
 struct App {
     /// Raw input buffer. May contain '\n' for multi-line prompts.
     input: String,
@@ -99,6 +275,61 @@ struct App {
     last_content_height: u16,
     /// Visual height of the transcript viewport (last frame).
     last_viewport_height: u16,
+    /// @-file suggestion popup state.
+    suggest: SuggestState,
+    /// Working directory for file suggestions.
+    cwd: PathBuf,
+}
+
+impl App {
+    /// Refresh suggestions based on current input + cursor.
+    fn refresh_suggestions(&mut self) {
+        if let Some((start, prefix)) = find_at_prefix(&self.input, self.cursor) {
+            let raw = &prefix[1..]; // strip '@'
+            let is_quoted = raw.starts_with('"');
+            let query = if is_quoted { &raw[1..] } else { raw };
+            let items = collect_suggestions(&self.cwd, query);
+            self.suggest = SuggestState {
+                start,
+                items,
+                selected: 0,
+                active: true,
+                is_quoted,
+            };
+        } else {
+            self.suggest.active = false;
+        }
+    }
+
+    /// Accept the currently selected suggestion into the input buffer.
+    fn accept_suggestion(&mut self) {
+        if !self.suggest.active || self.suggest.items.is_empty() {
+            return;
+        }
+        let sel = &self.suggest.items[self.suggest.selected];
+        let value = build_completion_value(&sel.path, sel.is_dir, self.suggest.is_quoted);
+        let before = &self.input.clone()[..self.suggest.start];
+        let after = &self.input[self.cursor..];
+        // For directories, don't add trailing space so user can keep typing
+        let suffix = if sel.is_dir { "" } else { " " };
+        self.input = format!("{}{}{}{}", before, value, suffix, after);
+        self.cursor = before.len() + value.len() + suffix.len();
+        self.suggest.active = false;
+    }
+
+    /// Move selection up.
+    fn suggest_prev(&mut self) {
+        if self.suggest.selected > 0 {
+            self.suggest.selected -= 1;
+        }
+    }
+
+    /// Move selection down.
+    fn suggest_next(&mut self) {
+        if self.suggest.selected + 1 < self.suggest.items.len() {
+            self.suggest.selected += 1;
+        }
+    }
 }
 
 impl App {
@@ -114,6 +345,8 @@ impl App {
             quit: false,
             last_content_height: 0,
             last_viewport_height: 0,
+            suggest: SuggestState::default(),
+            cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
         }
     }
 
@@ -177,9 +410,9 @@ impl App {
                     self.push(Msg::Error(err));
                 }
                 self.push(Msg::Session(format!(
-                    "session stopped • {} • {:?}ms • {:?} est. input tokens • {:?} est. output tokens",
+                    "session stopped • {} • {:?}s • {:?} est. input tokens • {:?} est. output tokens",
                     if s.success { "ok" } else { "failed" },
-                    s.usage.latency,
+                    s.usage.latency as f64 / 1000_f64,
                     s.usage.estimated_input_tokens,
                     s.usage.estimated_output_tokens,
                 )));
@@ -331,8 +564,18 @@ async fn handle_key<F, Fut>(
     match key.code {
         KeyCode::Char('c') if ctrl => app.quit = true,
         KeyCode::Char('d') if ctrl && app.input.is_empty() => app.quit = true,
-        KeyCode::Esc => app.quit = true,
+        KeyCode::Esc => {
+            if app.suggest.active {
+                app.suggest.active = false;
+                return;
+            }
+            app.quit = true;
+        }
         KeyCode::Enter if !app.busy => {
+            if app.suggest.active {
+                app.accept_suggestion();
+                return;
+            }
             if key.modifiers.contains(KeyModifiers::SHIFT) {
                 app.input.insert(app.cursor, '\n');
                 app.cursor += 1;
@@ -380,16 +623,36 @@ async fn handle_key<F, Fut>(
         KeyCode::Char(c) if !ctrl => {
             app.input.insert(app.cursor, c);
             app.cursor += c.len_utf8();
+            if c == '@' || (app.suggest.active && c != ' ') {
+                app.refresh_suggestions();
+            } else if c == ' ' {
+                app.suggest.active = false;
+            }
+        }
+        KeyCode::Tab if !app.busy => {
+            if !app.suggest.active {
+                // Try to trigger suggestions if cursor is after @
+                app.refresh_suggestions();
+            }
+            if app.suggest.active {
+                app.accept_suggestion();
+            }
+        }
+        KeyCode::Up if app.suggest.active => {
+            app.suggest_prev();
+        }
+        KeyCode::Down if app.suggest.active => {
+            app.suggest_next();
         }
         KeyCode::Backspace => {
             if app.cursor > 0 {
-                // remove the previous char (UTF-8 safe via floor_char_boundary equivalent)
                 let mut new_cursor = app.cursor - 1;
                 while !app.input.is_char_boundary(new_cursor) && new_cursor > 0 {
                     new_cursor -= 1;
                 }
                 app.input.replace_range(new_cursor..app.cursor, "");
                 app.cursor = new_cursor;
+                app.refresh_suggestions();
             }
         }
         KeyCode::Left => {
@@ -429,20 +692,30 @@ async fn handle_key<F, Fut>(
 
 fn draw(f: &mut Frame, app: &mut App) {
     let input_height = input_visual_height(&app.input, f.area().width);
+    let suggest_height = if app.suggest.active {
+        (app.suggest.items.len().min(SUGGEST_MAX_VISIBLE) as u16 + 2).min(f.area().height / 2)
+    } else {
+        0
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),            // header
-            Constraint::Min(1),               // chat
-            Constraint::Length(input_height), // input (dynamic)
-            Constraint::Length(1),            // hint
+            Constraint::Length(3),              // header
+            Constraint::Min(1),                 // chat
+            Constraint::Length(suggest_height), // suggestion popup
+            Constraint::Length(input_height),   // input (dynamic)
+            Constraint::Length(1),              // hint
         ])
         .split(f.area());
 
     draw_header(f, chunks[0], app);
     draw_transcript(f, chunks[1], app);
-    draw_input(f, chunks[2], app);
-    draw_hint(f, chunks[3], app);
+    if app.suggest.active {
+        draw_suggestions(f, chunks[2], app);
+    }
+    draw_input(f, chunks[3], app);
+    draw_hint(f, chunks[4], app);
 }
 
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
@@ -789,9 +1062,60 @@ fn draw_input(f: &mut Frame, area: Rect, app: &App) {
     }
 }
 
+fn draw_suggestions(f: &mut Frame, area: Rect, app: &App) {
+    if app.suggest.items.is_empty() {
+        return;
+    }
+    let visible = app.suggest.items.len().min(SUGGEST_MAX_VISIBLE);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::ACCENT))
+        .padding(Padding::horizontal(1));
+
+    let inner = block.inner(area);
+    let max_name_width = inner.width.saturating_mul(2).saturating_div(5).max(8) as usize;
+
+    let mut lines: Vec<Line> = Vec::with_capacity(visible);
+    for (i, item) in app.suggest.items.iter().enumerate().take(visible) {
+        let is_selected = i == app.suggest.selected;
+        let name = if item.name.width() > max_name_width {
+            format!(
+                "{}…",
+                &item.name[..item.name.floor_char_boundary(max_name_width - 1)]
+            )
+        } else {
+            item.name.clone()
+        };
+        let icon = if item.is_dir { "📁 " } else { "📄 " };
+        let name_span = Span::styled(
+            format!("{}{}", icon, name),
+            if is_selected {
+                Style::default()
+                    .fg(theme::ACCENT)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme::ASSISTANT)
+            },
+        );
+        let path_span = Span::styled(
+            format!("  {}", item.path),
+            Style::default()
+                .fg(theme::DIM)
+                .add_modifier(Modifier::ITALIC),
+        );
+        lines.push(Line::from(vec![name_span, path_span]));
+    }
+
+    let p = Paragraph::new(lines).block(block);
+    f.render_widget(p, area);
+}
+
 fn draw_hint(f: &mut Frame, area: Rect, app: &App) {
     let hint = if app.busy {
         "  streaming…  •  Ctrl+C quit"
+    } else if app.suggest.active {
+        "  ↑↓ navigate  •  Tab/Enter accept  •  Esc cancel"
     } else {
         "  Enter send  •  PgUp/PgDn scroll  •  /exit or Esc to quit"
     };

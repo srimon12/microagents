@@ -242,7 +242,7 @@ impl<Ctx: Debug> Debug for MicroAgent<Ctx> {
 ///
 /// let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
 ///     .provider("openai".to_string()).unwrap()
-///     .model("gpt-5.5".into())
+///     .model("gpt-5.5")
 ///     .build()
 ///     .expect("API key must be set");
 /// ```
@@ -281,7 +281,11 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     /// Register a single skill by name.
     ///
     /// Searches `.agents/skills/{name}` then `~/.agents/skills/{name}`.
-    pub fn add_skill(mut self, skill_name: String) -> Result<Self, MicroAgentBuilderError> {
+    pub fn add_skill(
+        mut self,
+        skill_name: impl Into<String>,
+    ) -> Result<Self, MicroAgentBuilderError> {
+        let skill_name = skill_name.into();
         if let Some(skill_path) = ensure_skill(&skill_name) {
             let description = parse_skill(&skill_path)?;
             self.skills.insert(skill_name, description);
@@ -308,8 +312,8 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     }
 
     /// Set the model identifier. If empty, the provider's default is used.
-    pub fn model(mut self, model: String) -> Self {
-        self.model = model;
+    pub fn model(mut self, model: impl Into<String>) -> Self {
+        self.model = model.into();
         self
     }
 
@@ -348,11 +352,12 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     }
 
     /// Append free-form instructions to the system prompt.
-    pub fn custom_instructions(mut self, instructions: String) -> Self {
-        self.custom_instructions = instructions;
+    pub fn custom_instructions(mut self, instructions: impl Into<String>) -> Self {
+        self.custom_instructions = instructions.into();
         self
     }
 
+    /// Load custom instructions from an AGENTS.md file in the current repository
     pub fn load_agents_md(mut self) -> Result<Self, MicroAgentBuilderError> {
         let instructions = load_agents_md()?;
         self.custom_instructions += &instructions;
@@ -460,6 +465,31 @@ You are {} provided by {}
 }
 
 impl<Ctx> MicroAgent<Ctx> {
+    pub fn resolve_prompt(&self, prompt: &str) -> Result<String, AgentError> {
+        if prompt.starts_with("/") {
+            let parts: Vec<&str> = prompt.split_whitespace().collect();
+            let skill = parts
+                .first()
+                .map(|s| s.trim_start_matches("/"))
+                .unwrap_or("");
+            if self.skills.contains_key(skill) {
+                let skill_path = ensure_skill(skill);
+                match skill_path {
+                    Some(p) => {
+                        let content = fs::read_to_string(p.join("SKILL.md"))
+                            .map_err(|_| AgentError::SkillResolutionError)?;
+                        return Ok(prompt.replace(
+                            &format!("/{}", skill),
+                            &format!("<skill>\n{}\n</skill>\n\n", content),
+                        ));
+                    }
+                    None => return Err(AgentError::SkillResolutionError),
+                }
+            }
+        }
+        Ok(prompt.to_owned())
+    }
+
     /// Lazily initialise the LLM client.
     ///
     /// For non-OpenRouter providers the client is cached after the first call.
@@ -676,6 +706,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
         let local_tools: HashMap<String, Arc<dyn ToolFunction<Ctx>>> = self.tools.clone();
         let mut input_text = self.system.clone();
         let mut completion_text = String::new();
+        let prompt = self.resolve_prompt(&prompt)?;
         let start_processing = Utc::now();
         let s: RunStream = Box::pin(stream! {
             let resolved_sid;
@@ -759,7 +790,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
             yield Ok(user_prompt_submit);
 
             loop {
-                let mut generation = match self.generate(&resolved_sid.clone()).await {
+                let mut generation = match self.generate(&resolved_sid).await {
                     Ok(g) => g,
                     Err(e) => {
                         yield Err(AgentError::RunError(format!("An error occurred while starting the generation stream: {}", e)));
@@ -901,12 +932,18 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                         timestamp: Utc::now(),
                                     })
                                 } else {
-                                    AgentEventAny::SkillLoad(SkillLoadEvent {
-                                        session_id: resolved_sid.clone(),
-                                        turn_id: turn_id.clone(),
-                                        skill_name: v["skill_name"].as_str().unwrap_or_default().to_string(),
-                                        timestamp: Utc::now(),
-                                    })
+                                    match v["skill_name"].as_str() {
+                                        Some(n) => AgentEventAny::SkillLoad(SkillLoadEvent {
+                                            session_id: resolved_sid.clone(),
+                                            turn_id: turn_id.clone(),
+                                            skill_name: n.to_string(),
+                                            timestamp: Utc::now(),
+                                        }),
+                                        None => {
+                                            yield Err(AgentError::RunError("Skill name is not a string".to_string()));
+                                            return;
+                                        }
+                                    }
                                 };
                                 match self.storage.update_session(tc_ev.clone()).await {
                                     Ok(_) => {},
@@ -1177,7 +1214,7 @@ mod tests {
 
     #[test]
     fn test_builder_model_sets_model() {
-        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(())).model("gpt-5.5".into());
+        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(())).model("gpt-5.5");
         assert_eq!(builder.model, "gpt-5.5");
     }
 
@@ -1190,8 +1227,8 @@ mod tests {
 
     #[test]
     fn test_builder_custom_instructions_sets_instructions() {
-        let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
-            .custom_instructions("Be concise".into());
+        let builder =
+            MicroAgentBuilder::new(ToolExecutionContext::new(())).custom_instructions("Be concise");
         assert_eq!(builder.custom_instructions, "Be concise");
     }
 
@@ -1273,7 +1310,7 @@ mod tests {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
             .provider("ollama".to_string())
             .unwrap()
-            .model("llama3.2".into())
+            .model("llama3.2")
             .build()
             .expect("Should be able to build the agent");
         assert_eq!(agent.model, "llama3.2");
@@ -1334,7 +1371,7 @@ mod tests {
         let agent = MicroAgentBuilder::new(ToolExecutionContext::new(()))
             .provider("ollama".to_string())
             .unwrap()
-            .model("custom-model".into())
+            .model("custom-model")
             .build()
             .expect("Should be able to build the agent");
         assert!(agent.system.contains("custom-model"));
