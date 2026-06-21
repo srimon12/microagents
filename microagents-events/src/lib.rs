@@ -63,11 +63,20 @@ impl fmt::Display for DeltaType {
     }
 }
 
-impl From<DeltaType> for Value {
-    fn from(value: DeltaType) -> Self {
-        match value {
-            DeltaType::Text => Value::from("text"),
-            DeltaType::Thinking => Value::from("thinking"),
+/// Status enum for an agent task
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum TaskStatus {
+    Queued,
+    InProgress,
+    Done,
+}
+
+impl fmt::Display for TaskStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Queued => write!(f, "queued"),
+            Self::InProgress => write!(f, "in_progress"),
+            Self::Done => write!(f, "done"),
         }
     }
 }
@@ -101,6 +110,7 @@ pub struct SessionStopEvent {
     pub result: Option<String>,
     pub error: Option<String>,
     pub timestamp: DateTime<Utc>,
+    pub incomplete_tasks: Option<Vec<String>>,
     pub usage: Usage,
 }
 
@@ -163,6 +173,16 @@ pub struct AssistantResponseEvent {
     pub timestamp: DateTime<Utc>,
 }
 
+/// Event emitted when the event creates, executes and finishes a task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskEvent {
+    pub session_id: String,
+    pub turn_id: String,
+    pub task_name: String,
+    pub task_status: TaskStatus,
+    pub timestamp: DateTime<Utc>,
+}
+
 impl AgentEvent for SessionInitEvent {
     fn to_jsonrpc(&self) -> JsonRpcNotification {
         JsonRpcNotification::builder()
@@ -197,6 +217,10 @@ impl AgentEvent for SessionStopEvent {
             .add_param(
                 "timestamp".into(),
                 serde_json::to_value(self.timestamp).unwrap(),
+            )
+            .add_param(
+                "incomplete_tasks".into(),
+                Value::from(self.incomplete_tasks.clone()),
             )
             .add_param("usage".into(), serde_json::to_value(self.usage).unwrap())
     }
@@ -331,6 +355,28 @@ impl AgentEvent for AssistantResponseEvent {
     }
 }
 
+impl AgentEvent for TaskEvent {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
+        JsonRpcNotification::builder()
+            .method("assistant.task".into())
+            .add_param("session_id".into(), Value::from(self.session_id.clone()))
+            .add_param("turn_id".into(), Value::from(self.turn_id.clone()))
+            .add_param("task_name".into(), Value::from(self.task_name.clone()))
+            .add_param(
+                "task_status".to_string(),
+                serde_json::to_value(self.task_status).unwrap(),
+            )
+            .add_param(
+                "timestamp".into(),
+                serde_json::to_value(self.timestamp).unwrap(),
+            )
+    }
+
+    fn session_id(&self) -> String {
+        self.session_id.clone()
+    }
+}
+
 /// A sum type wrapping any agent event.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -343,6 +389,7 @@ pub enum AgentEventAny {
     AssistantResponse(AssistantResponseEvent),
     SkillLoad(SkillLoadEvent),
     UserPromptSubmit(UserPromptSubmitEvent),
+    Task(TaskEvent),
 }
 
 impl AgentEventAny {
@@ -356,6 +403,7 @@ impl AgentEventAny {
             Self::UserPromptSubmit(s) => s.timestamp,
             Self::ToolCall(s) => s.timestamp,
             Self::ToolResult(s) => s.timestamp,
+            Self::Task(s) => s.timestamp,
         }
     }
 }
@@ -371,6 +419,7 @@ impl AgentEvent for AgentEventAny {
             Self::UserPromptSubmit(s) => s.to_jsonrpc(),
             Self::ToolResult(s) => s.to_jsonrpc(),
             Self::SkillLoad(s) => s.to_jsonrpc(),
+            Self::Task(s) => s.to_jsonrpc(),
         }
     }
 
@@ -384,6 +433,7 @@ impl AgentEvent for AgentEventAny {
             Self::ToolCall(s) => s.session_id.clone(),
             Self::ToolResult(s) => s.session_id.clone(),
             Self::UserPromptSubmit(s) => s.session_id.clone(),
+            Self::Task(s) => s.session_id.clone(),
         }
     }
 }
@@ -462,6 +512,15 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     .get("error")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
+                incomplete_tasks: value
+                    .params
+                    .get("incomplete_tasks")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    }),
                 timestamp: {
                     let raw = value
                         .params
@@ -633,6 +692,35 @@ impl TryFrom<JsonRpcNotification> for AgentEventAny {
                     },
                 }))
             }
+            "assistant.task" => Ok(Self::Task(TaskEvent {
+                session_id,
+                turn_id,
+                timestamp: {
+                    let raw = value
+                        .params
+                        .get("timestamp")
+                        .ok_or_else(|| AgentEventError::MissingField("timestamp".to_string()))?;
+                    let tms: DateTime<Utc> = serde_json::from_value(raw.to_owned())
+                        .map_err(|_| AgentEventError::InvalidFieldType("timestamp".to_string()))?;
+                    tms
+                },
+                task_name: value
+                    .params
+                    .get("task_name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| AgentEventError::MissingField("task_name".to_string()))?
+                    .to_string(),
+                task_status: {
+                    let raw = value
+                        .params
+                        .get("task_status")
+                        .ok_or_else(|| AgentEventError::MissingField("task_status".to_string()))?;
+                    let ts: TaskStatus = serde_json::from_value(raw.to_owned()).map_err(|_| {
+                        AgentEventError::InvalidFieldType("task_status".to_string())
+                    })?;
+                    ts
+                },
+            })),
             method => Err(AgentEventError::UnknownMethod(method.to_string())),
         }
     }
@@ -676,12 +764,6 @@ mod tests {
     }
 
     #[test]
-    fn delta_type_from_value() {
-        assert_eq!(Value::from(DeltaType::Text), Value::from("text"));
-        assert_eq!(Value::from(DeltaType::Thinking), Value::from("thinking"));
-    }
-
-    #[test]
     fn session_init_event_to_jsonrpc() {
         let event = SessionInitEvent {
             session_id: "s1".into(),
@@ -709,12 +791,14 @@ mod tests {
             error: None,
             timestamp: Utc::now(),
             usage: Usage::default(),
+            incomplete_tasks: None,
         };
         let rpc = event.to_jsonrpc();
         assert_eq!(rpc.method, "session.stop");
         assert_eq!(rpc.params.get("success"), Some(&Value::from(true)));
         assert_eq!(rpc.params.get("result"), Some(&Value::from("done")));
         assert_eq!(rpc.params.get("error"), Some(&Value::Null));
+        assert_eq!(rpc.params.get("incomplete_tasks"), Some(&Value::Null));
         assert_eq!(
             rpc.params.get("usage"),
             Some(
@@ -811,6 +895,24 @@ mod tests {
     }
 
     #[test]
+    fn task_event_to_jsonrpc() {
+        let event = TaskEvent {
+            session_id: "s1".into(),
+            turn_id: "t1".into(),
+            task_status: TaskStatus::InProgress,
+            task_name: "test".into(),
+            timestamp: Utc::now(),
+        };
+        let rpc = event.to_jsonrpc();
+        assert_eq!(rpc.method, "assistant.task");
+        assert_eq!(rpc.params.get("task_name"), Some(&Value::from("test")));
+        assert_eq!(
+            rpc.params.get("task_status"),
+            Some(&serde_json::to_value(TaskStatus::InProgress).unwrap())
+        );
+    }
+
+    #[test]
     fn agent_event_any_session_id() {
         let event = AgentEventAny::SessionInit(SessionInitEvent {
             session_id: "sid".into(),
@@ -893,6 +995,7 @@ mod tests {
             .add_param("success".into(), Value::from(true))
             .add_param("result".into(), Value::from("done"))
             .add_param("error".into(), Value::Null)
+            .add_param("incomplete_tasks".into(), Value::Null)
             .add_param("timestamp".into(), {
                 let tms = Utc::now();
                 serde_json::to_value(tms).expect("Should convert to value")
@@ -1041,6 +1144,27 @@ mod tests {
             });
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(matches!(any, AgentEventAny::AssistantResponse(ref e) if e.tool_calls.is_some()));
+    }
+
+    #[test]
+    fn try_from_jsonrpc_task() {
+        let rpc = JsonRpcNotification::builder()
+            .method("assistant.task".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("turn_id".into(), Value::from("t1"))
+            .add_param("task_name".into(), Value::from("test"))
+            .add_param(
+                "task_status".into(),
+                serde_json::to_value(TaskStatus::Done).unwrap(),
+            )
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(
+            matches!(any, AgentEventAny::Task(ref e) if e.task_name == "test" && e.task_status == TaskStatus::Done)
+        );
     }
 
     #[test]

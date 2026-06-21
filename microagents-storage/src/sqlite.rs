@@ -276,6 +276,7 @@ mod tests {
             success: true,
             timestamp: Utc::now(),
             usage: Usage::default(),
+            incomplete_tasks: None,
         }))
         .await
         .expect("Should be able to update memory");

@@ -275,7 +275,8 @@ mod tests {
                 result: None,
                 error: None,
                 timestamp: Utc::now(),
-                usage: Usage::default()
+                usage: Usage::default(),
+                incomplete_tasks: None,
             }))
             .is_none()
         );
