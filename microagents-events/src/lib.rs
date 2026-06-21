@@ -8,7 +8,7 @@ use std::{convert::TryFrom, fmt};
 
 use crate::types::{AgentEvent, AgentEventError, JsonRpcNotification, ToolCall, ToolResult};
 
-pub const EVENTS_PROTOCOL_VERSION: &str = "0.1.0";
+pub const EVENTS_PROTOCOL_VERSION: &str = "0.2.0";
 
 /// Indicates whether a session is being started fresh or resumed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

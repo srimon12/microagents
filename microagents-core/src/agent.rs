@@ -957,10 +957,10 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                         },
                         incomplete_tasks: {
                             let ts = self.tasks.lock().await;
-                            if ts.len() == 0 {
+                            if ts.is_empty() {
                                 None
                             } else {
-                                Some(ts.iter().map(|(k, _)| k.to_string()).collect())
+                                Some(ts.keys().map(|k| k.to_string()).collect())
                             }
                         }
                     });
@@ -1027,7 +1027,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                             return;
                                         }
                                     };
-                                    let ts: TaskStatus = match serde_json::from_value((&v["task_status"]).to_owned()) {
+                                    let ts: TaskStatus = match serde_json::from_value(v["task_status"].to_owned()) {
                                         Ok(v) => v,
                                         Err(_) => {
                                             yield Err(AgentError::RunError("Invalid type for task status".to_string()));
