@@ -119,15 +119,14 @@ pub fn get_incomplete_tasks(
         (Some(stop), Some(task)) if stop >= task
     );
 
-    if stop_is_authoritative {
-        if let Some(incomplete) = incomplete_tasks.filter(|v| !v.is_empty()) {
-            return validate_incomplete_tasks(&incomplete_by_status, &incomplete);
-        }
+    if stop_is_authoritative && let Some(incomplete) = incomplete_tasks.filter(|v| !v.is_empty()) {
+        return validate_incomplete_tasks(&incomplete_by_status, &incomplete);
     }
 
     Ok(incomplete_by_status)
 }
 
+#[allow(clippy::type_complexity)]
 fn collect_events(
     events: &[AgentEventAny],
 ) -> (
