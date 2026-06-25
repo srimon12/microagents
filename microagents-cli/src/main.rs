@@ -99,6 +99,7 @@ async fn build_agent(
         .provider(prov)?
         .storage(st)
         .await?
+        .load_agents_md()?
         .add_tool(Arc::new(tools::WriteTool))?
         .add_tool(Arc::new(tools::EditTool))?
         .add_tool(Arc::new(tools::ShellExecuteTool))?

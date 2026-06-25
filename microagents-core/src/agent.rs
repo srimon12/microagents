@@ -372,7 +372,9 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     /// Load custom instructions from an AGENTS.md file in the current repository
     pub fn load_agents_md(mut self) -> Result<Self, MicroAgentBuilderError> {
         let instructions = load_agents_md()?;
-        self.custom_instructions += &instructions;
+        if let Some(instr) = instructions {
+            self.custom_instructions += &instr;
+        }
         Ok(self)
     }
 
@@ -1269,10 +1271,11 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_default_tools_contains_skills_tool() {
+    fn test_builder_default_tools_contains_skills_and_tasks_tool() {
         let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()));
         assert!(builder.tools.contains_key("skills"));
-        assert_eq!(builder.tools.len(), 1);
+        assert!(builder.tools.contains_key("tasks"));
+        assert_eq!(builder.tools.len(), 2);
     }
 
     #[test]
@@ -1340,7 +1343,7 @@ mod tests {
         let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
             .add_tool(Arc::new(DummyTool))
             .unwrap();
-        assert_eq!(builder.tools.len(), 2);
+        assert_eq!(builder.tools.len(), 3);
         assert!(builder.tools.contains_key("dummy"));
     }
 
@@ -1395,7 +1398,7 @@ mod tests {
             .unwrap()
             .build()
             .expect("Should be able to build the agent");
-        assert_eq!(agent.tools.len(), 2);
+        assert_eq!(agent.tools.len(), 3);
     }
 
     #[test]

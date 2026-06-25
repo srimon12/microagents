@@ -1,6 +1,6 @@
 #[cfg(feature = "token_estimation")]
 use std::sync::OnceLock;
-use std::{fs, sync::Arc};
+use std::{fs, path::Path, sync::Arc};
 
 use microagents_events::{AgentEventAny, types::ToolResult};
 use serde_json::Value;
@@ -153,9 +153,12 @@ pub fn estimate_tokens(_text: &str) -> Result<usize, AgentError> {
     }
 }
 
-pub fn load_agents_md() -> Result<String, MicroAgentBuilderError> {
-    let content = fs::read_to_string(AGENTS_MD)?;
-    Ok(content)
+pub fn load_agents_md() -> Result<Option<String>, MicroAgentBuilderError> {
+    if Path::new(AGENTS_MD).exists() {
+        let content = fs::read_to_string(AGENTS_MD)?;
+        return Ok(Some(content));
+    }
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -417,6 +420,6 @@ mod tests {
         let instr = "you are a helpful assistant";
         fs::write(AGENTS_MD, instr).expect("Should be able to write file");
         let loaded = load_agents_md().expect("Should be able to load AGENTS.md content");
-        assert_eq!(loaded, instr);
+        assert_eq!(loaded, Some(instr.to_string()));
     }
 }
