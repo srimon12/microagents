@@ -39,6 +39,8 @@ pub enum AgentError {
     /// Tokenizer could not be loaded
     #[error("Tokenizer could not be loaded: {0}")]
     TokenizerLoadingError(String),
+    #[error("Error loading tasks: {0}")]
+    TaskLoadingError(String),
 }
 
 /// A single item yielded by a [`GenerationStream`].

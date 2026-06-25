@@ -39,7 +39,7 @@ use ultrafast_models_sdk::{
 use crate::{
     common::{
         JsonResult, call_tool, check_env_var, convert_event_to_message, estimate_tokens,
-        load_agents_md, parse_json_fragment,
+        get_incomplete_tasks, load_agents_md, parse_json_fragment,
     },
     skills::{self, ensure_skill, find_skills, parse_skill},
     types::{Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction},
@@ -717,7 +717,7 @@ impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for TasksTool {
     ) -> Result<ToolResult, AgentError> {
         let task_name = input["task_name"]
             .as_str()
-            .ok_or_else(|| AgentError::ToolCallError("missing skill_name".into()))?;
+            .ok_or_else(|| AgentError::ToolCallError("missing task_name".into()))?;
         let task_status = &input["task_status"];
         let ts: TaskStatus = serde_json::from_value(task_status.to_owned())
             .map_err(|_| AgentError::ToolCallError("invalid task status".into()))?;
@@ -803,6 +803,16 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                         return;
                     }
                 };
+
+                let incompl_tasks_res = get_incomplete_tasks(&events);
+                let incomplete_tasks = match incompl_tasks_res {
+                    Ok(t) => t,
+                    Err(e) => {
+                        yield Err(e);
+                        return;
+                    }
+                };
+                self.tasks = Arc::new(Mutex::new(incomplete_tasks));
 
                 resolved_sid = sid;
 
@@ -919,7 +929,14 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()), timestamp: Utc::now(), usage: Usage {
                                 latency,
                                 ..Default::default()
-                            }, incomplete_tasks: None});
+                            }, incomplete_tasks: {
+                                let ts = self.tasks.lock().await;
+                                if ts.is_empty() {
+                                    None
+                                } else {
+                                    Some(ts.keys().map(|k| k.to_string()).collect())
+                                }
+                            }});
                             match self.storage.update_session(stop_ev.clone()).await {
                                 Ok(_) => {},
                                 Err(e) => {
