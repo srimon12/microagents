@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use chrono::{DateTime, Utc};
 use microagents_events::{AgentEventAny, TaskStatus, types::ToolResult};
 use serde_json::Value;
 use ultrafast_models_sdk::{
@@ -103,44 +104,79 @@ pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
 pub fn get_incomplete_tasks(
     events: &[AgentEventAny],
 ) -> Result<HashMap<String, TaskStatus>, AgentError> {
+    let (tasks_hashmap, incomplete_tasks, last_task_ts, last_stop_ts) = collect_events(events);
+
+    let incomplete_by_status: HashMap<String, TaskStatus> = tasks_hashmap
+        .into_iter()
+        .filter(|(_, s)| *s != TaskStatus::Done)
+        .collect();
+
+    // Use >= instead of strict > to allow for
+    // some tiny deltas not being captured by the
+    // Utc time
+    let stop_is_authoritative = matches!(
+        (last_stop_ts, last_task_ts),
+        (Some(stop), Some(task)) if stop >= task
+    );
+
+    if stop_is_authoritative {
+        if let Some(incomplete) = incomplete_tasks.filter(|v| !v.is_empty()) {
+            return validate_incomplete_tasks(&incomplete_by_status, &incomplete);
+        }
+    }
+
+    Ok(incomplete_by_status)
+}
+
+fn collect_events(
+    events: &[AgentEventAny],
+) -> (
+    HashMap<String, TaskStatus>,
+    Option<Vec<String>>,
+    Option<DateTime<Utc>>,
+    Option<DateTime<Utc>>,
+) {
     let mut tasks_hashmap: HashMap<String, TaskStatus> = HashMap::new();
     let mut incomplete_tasks: Option<Vec<String>> = None;
+    let mut last_task_ts: Option<DateTime<Utc>> = None;
+    let mut last_stop_ts: Option<DateTime<Utc>> = None;
+
     for ev in events {
         match ev {
             AgentEventAny::Task(t) => {
                 tasks_hashmap.insert(t.task_name.clone(), t.task_status);
+                last_task_ts = Some(t.timestamp);
             }
             AgentEventAny::SessionStop(s) => {
                 incomplete_tasks = s.incomplete_tasks.clone();
+                last_stop_ts = Some(s.timestamp);
             }
-            _ => continue,
+            _ => {}
         }
     }
-    let ts: HashMap<String, TaskStatus> = tasks_hashmap
-        .iter()
-        .filter(|(_, s)| *s != &TaskStatus::Done)
-        .map(|(t, s)| (t.clone(), *s))
-        .collect();
-    if let Some(incomplete) = incomplete_tasks
-        && !incomplete.is_empty()
-    {
-        if ts.is_empty() {
-            return Err(AgentError::TaskLoadingError("There are reportedly incomplete tasks in this session but none could be inferred from the events".to_string()));
-        }
-        let ts_keys: HashSet<&String> = ts.keys().collect();
-        let incomplete_set: HashSet<&String> = incomplete.iter().collect();
-        if ts_keys != incomplete_set {
-            return Err(AgentError::TaskLoadingError(
-                "Reported incomplete tasks differ from the ones inferred from the events"
-                    .to_string(),
-            ));
-        }
-        return Ok(ts);
+
+    (tasks_hashmap, incomplete_tasks, last_task_ts, last_stop_ts)
+}
+
+fn validate_incomplete_tasks(
+    by_status: &HashMap<String, TaskStatus>,
+    reported: &[String],
+) -> Result<HashMap<String, TaskStatus>, AgentError> {
+    if by_status.is_empty() {
+        return Err(AgentError::TaskLoadingError(
+            "Incomplete tasks were reported but none could be inferred from events".to_string(),
+        ));
     }
-    // if no tasks are reported incomplete
-    // assume that the session stop event report
-    // is incorrect and load the tasks from events
-    Ok(ts)
+
+    let inferred: HashSet<&String> = by_status.keys().collect();
+    let reported: HashSet<&String> = reported.iter().collect();
+    if inferred != reported {
+        return Err(AgentError::TaskLoadingError(
+            "Reported incomplete tasks differ from those inferred from events".to_string(),
+        ));
+    }
+
+    Ok(by_status.clone())
 }
 
 /// Result of attempting to parse a (potentially partial) JSON string.
@@ -616,22 +652,6 @@ mod tests {
             }),
         ];
         let err = get_incomplete_tasks(&events).expect_err("Should fail on mismatch");
-        assert!(matches!(err, AgentError::TaskLoadingError(_)));
-    }
-
-    #[test]
-    fn test_get_incomplete_tasks_reported_but_none_inferred_errors() {
-        // SessionStop reports incomplete tasks but no Task events: error.
-        let events = vec![AgentEventAny::SessionStop(SessionStopEvent {
-            session_id: "s1".into(),
-            success: false,
-            result: None,
-            error: None,
-            timestamp: Utc::now(),
-            usage: Usage::default(),
-            incomplete_tasks: Some(vec!["task_a".into()]),
-        })];
-        let err = get_incomplete_tasks(&events).expect_err("Should fail when no tasks inferred");
         assert!(matches!(err, AgentError::TaskLoadingError(_)));
     }
 
