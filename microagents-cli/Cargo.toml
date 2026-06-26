@@ -1,6 +1,6 @@
 [package]
 name = "microagents-cli"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
@@ -12,9 +12,9 @@ keywords = ["ai", "agents", "cli", "tui", "rust"]
 async-trait = "0.1.89"
 futures-core = "0.3.32"
 futures-util = "0.3.32"
-microagents-core = { path = "../microagents-core", version = "0.4.1" }
-microagents-events = { path = "../microagents-events", version = "0.1.0" }
-microagents-storage = { path = "../microagents-storage", version = "0.1.0" }
+microagents-core = { path = "../microagents-core", version = "0.4.2" }
+microagents-events = { path = "../microagents-events", version = "0.2.0" }
+microagents-storage = { path = "../microagents-storage", version = "0.1.1" }
 qdrant-edge = "0.7.1"
 ratatui = {version = "0.30.0", features = ["serde", "palette"]}
 serde_json = "1.0.150"

@@ -3768,7 +3768,7 @@ dependencies = [
 
 [[package]]
 name = "microagents-cli"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "astchunk",
  "async-trait",
@@ -3798,7 +3798,7 @@ dependencies = [
 
 [[package]]
 name = "microagents-core"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -3825,7 +3825,7 @@ dependencies = [
 
 [[package]]
 name = "microagents-events"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -3835,7 +3835,7 @@ dependencies = [
 
 [[package]]
 name = "microagents-storage"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -1,8 +1,13 @@
 #[cfg(feature = "token_estimation")]
 use std::sync::OnceLock;
-use std::{fs, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    sync::Arc,
+};
 
-use microagents_events::{AgentEventAny, types::ToolResult};
+use chrono::{DateTime, Utc};
+use microagents_events::{AgentEventAny, TaskStatus, types::ToolResult};
 use serde_json::Value;
 use ultrafast_models_sdk::{
     Message, Role,
@@ -94,6 +99,85 @@ pub fn convert_event_to_message(event: AgentEventAny) -> Option<Message> {
     }
 }
 
+/// Get incomplete tasks from the events of a previous session, comparing them with the
+/// reported incomplete tasks to ensure no data loss/discrepancies
+pub fn get_incomplete_tasks(
+    events: &[AgentEventAny],
+) -> Result<HashMap<String, TaskStatus>, AgentError> {
+    let (tasks_hashmap, incomplete_tasks, last_task_ts, last_stop_ts) = collect_events(events);
+
+    let incomplete_by_status: HashMap<String, TaskStatus> = tasks_hashmap
+        .into_iter()
+        .filter(|(_, s)| *s != TaskStatus::Done)
+        .collect();
+
+    // Use >= instead of strict > to allow for
+    // some tiny deltas not being captured by the
+    // Utc time
+    let stop_is_authoritative = matches!(
+        (last_stop_ts, last_task_ts),
+        (Some(stop), Some(task)) if stop >= task
+    );
+
+    if stop_is_authoritative && let Some(incomplete) = incomplete_tasks.filter(|v| !v.is_empty()) {
+        return validate_incomplete_tasks(&incomplete_by_status, &incomplete);
+    }
+
+    Ok(incomplete_by_status)
+}
+
+#[allow(clippy::type_complexity)]
+fn collect_events(
+    events: &[AgentEventAny],
+) -> (
+    HashMap<String, TaskStatus>,
+    Option<Vec<String>>,
+    Option<DateTime<Utc>>,
+    Option<DateTime<Utc>>,
+) {
+    let mut tasks_hashmap: HashMap<String, TaskStatus> = HashMap::new();
+    let mut incomplete_tasks: Option<Vec<String>> = None;
+    let mut last_task_ts: Option<DateTime<Utc>> = None;
+    let mut last_stop_ts: Option<DateTime<Utc>> = None;
+
+    for ev in events {
+        match ev {
+            AgentEventAny::Task(t) => {
+                tasks_hashmap.insert(t.task_name.clone(), t.task_status);
+                last_task_ts = Some(t.timestamp);
+            }
+            AgentEventAny::SessionStop(s) => {
+                incomplete_tasks = s.incomplete_tasks.clone();
+                last_stop_ts = Some(s.timestamp);
+            }
+            _ => {}
+        }
+    }
+
+    (tasks_hashmap, incomplete_tasks, last_task_ts, last_stop_ts)
+}
+
+fn validate_incomplete_tasks(
+    by_status: &HashMap<String, TaskStatus>,
+    reported: &[String],
+) -> Result<HashMap<String, TaskStatus>, AgentError> {
+    if by_status.is_empty() {
+        return Err(AgentError::TaskLoadingError(
+            "Incomplete tasks were reported but none could be inferred from events".to_string(),
+        ));
+    }
+
+    let inferred: HashSet<&String> = by_status.keys().collect();
+    let reported: HashSet<&String> = reported.iter().collect();
+    if inferred != reported {
+        return Err(AgentError::TaskLoadingError(
+            "Reported incomplete tasks differ from those inferred from events".to_string(),
+        ));
+    }
+
+    Ok(by_status.clone())
+}
+
 /// Result of attempting to parse a (potentially partial) JSON string.
 pub enum JsonResult {
     /// Fully valid JSON value.
@@ -153,9 +237,15 @@ pub fn estimate_tokens(_text: &str) -> Result<usize, AgentError> {
     }
 }
 
-pub fn load_agents_md() -> Result<String, MicroAgentBuilderError> {
-    let content = fs::read_to_string(AGENTS_MD)?;
-    Ok(content)
+/// Load the content of an AGENTS.md file in the current directory, if it exists
+pub fn load_agents_md() -> Result<Option<String>, MicroAgentBuilderError> {
+    match fs::read_to_string(AGENTS_MD) {
+        Ok(s) => Ok(Some(s)),
+        Err(e) => match e.kind() {
+            std::io::ErrorKind::NotFound => Ok(None),
+            _ => Err(MicroAgentBuilderError::AgentsMdResolutionError(e)),
+        },
+    }
 }
 
 #[cfg(test)]
@@ -164,8 +254,8 @@ mod tests {
     use chrono::Utc;
     use microagents_events::{
         AssistantResponseEvent, SessionInitEvent, SessionInitType, SessionStopEvent,
-        SkillLoadEvent, StreamDeltaEvent, ToolCallEvent, ToolResultEvent, Usage,
-        UserPromptSubmitEvent,
+        SkillLoadEvent, StreamDeltaEvent, TaskEvent, TaskStatus, ToolCallEvent, ToolResultEvent,
+        Usage, UserPromptSubmitEvent,
         types::{FunctionCall as EventFunctionCall, ToolCall as EventToolCall},
     };
 
@@ -275,7 +365,8 @@ mod tests {
                 result: None,
                 error: None,
                 timestamp: Utc::now(),
-                usage: Usage::default()
+                usage: Usage::default(),
+                incomplete_tasks: None,
             }))
             .is_none()
         );
@@ -412,10 +503,188 @@ mod tests {
     }
 
     #[test]
+    fn test_get_incomplete_tasks_no_session_stop_returns_inferred() {
+        // No SessionStop event: tasks inferred from events only (Done filtered out).
+        let events = vec![
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_a".into(),
+                task_status: TaskStatus::InProgress,
+                timestamp: Utc::now(),
+            }),
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_b".into(),
+                task_status: TaskStatus::Done,
+                timestamp: Utc::now(),
+            }),
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_c".into(),
+                task_status: TaskStatus::Queued,
+                timestamp: Utc::now(),
+            }),
+        ];
+        let result = get_incomplete_tasks(&events).expect("Should infer incomplete tasks");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get("task_a"), Some(&TaskStatus::InProgress));
+        assert_eq!(result.get("task_c"), Some(&TaskStatus::Queued));
+        assert!(!result.contains_key("task_b"));
+    }
+
+    #[test]
+    fn test_get_incomplete_tasks_no_tasks_returns_empty() {
+        // No Task events and no incomplete tasks reported: empty result.
+        let events: Vec<AgentEventAny> = vec![];
+        let result = get_incomplete_tasks(&events).expect("Should return empty map");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_get_incomplete_tasks_session_stop_reports_matching() {
+        // SessionStop reports incomplete tasks that match the inferred ones.
+        let events = vec![
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_a".into(),
+                task_status: TaskStatus::InProgress,
+                timestamp: Utc::now(),
+            }),
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_b".into(),
+                task_status: TaskStatus::Queued,
+                timestamp: Utc::now(),
+            }),
+            AgentEventAny::SessionStop(SessionStopEvent {
+                session_id: "s1".into(),
+                success: false,
+                result: None,
+                error: None,
+                timestamp: Utc::now(),
+                usage: Usage::default(),
+                incomplete_tasks: Some(vec!["task_a".into(), "task_b".into()]),
+            }),
+        ];
+        let result = get_incomplete_tasks(&events).expect("Should return matching tasks");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get("task_a"), Some(&TaskStatus::InProgress));
+        assert_eq!(result.get("task_b"), Some(&TaskStatus::Queued));
+    }
+
+    #[test]
+    fn test_get_incomplete_tasks_session_stop_empty_uses_inferred() {
+        // SessionStop reports empty incomplete_tasks: fall back to inferred tasks.
+        let events = vec![
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_a".into(),
+                task_status: TaskStatus::InProgress,
+                timestamp: Utc::now(),
+            }),
+            AgentEventAny::SessionStop(SessionStopEvent {
+                session_id: "s1".into(),
+                success: true,
+                result: None,
+                error: None,
+                timestamp: Utc::now(),
+                usage: Usage::default(),
+                incomplete_tasks: Some(vec![]),
+            }),
+        ];
+        let result = get_incomplete_tasks(&events).expect("Should fall back to inferred tasks");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result.get("task_a"), Some(&TaskStatus::InProgress));
+    }
+
+    #[test]
+    fn test_get_incomplete_tasks_session_stop_none_uses_inferred() {
+        // SessionStop with incomplete_tasks=None: fall back to inferred tasks.
+        let events = vec![
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_a".into(),
+                task_status: TaskStatus::Queued,
+                timestamp: Utc::now(),
+            }),
+            AgentEventAny::SessionStop(SessionStopEvent {
+                session_id: "s1".into(),
+                success: true,
+                result: None,
+                error: None,
+                timestamp: Utc::now(),
+                usage: Usage::default(),
+                incomplete_tasks: None,
+            }),
+        ];
+        let result = get_incomplete_tasks(&events).expect("Should fall back to inferred tasks");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result.get("task_a"), Some(&TaskStatus::Queued));
+    }
+
+    #[test]
+    fn test_get_incomplete_tasks_mismatch_errors() {
+        // SessionStop reports incomplete tasks that differ from inferred: error.
+        let events = vec![
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_a".into(),
+                task_status: TaskStatus::InProgress,
+                timestamp: Utc::now(),
+            }),
+            AgentEventAny::SessionStop(SessionStopEvent {
+                session_id: "s1".into(),
+                success: false,
+                result: None,
+                error: None,
+                timestamp: Utc::now(),
+                usage: Usage::default(),
+                incomplete_tasks: Some(vec!["task_a".into(), "task_x".into()]),
+            }),
+        ];
+        let err = get_incomplete_tasks(&events).expect_err("Should fail on mismatch");
+        assert!(matches!(err, AgentError::TaskLoadingError(_)));
+    }
+
+    #[test]
+    fn test_get_incomplete_tasks_done_task_filtered_out() {
+        // A task marked Done should not appear even if reported as incomplete.
+        let events = vec![
+            AgentEventAny::Task(TaskEvent {
+                session_id: "s1".into(),
+                turn_id: "t1".into(),
+                task_name: "task_a".into(),
+                task_status: TaskStatus::Done,
+                timestamp: Utc::now(),
+            }),
+            AgentEventAny::SessionStop(SessionStopEvent {
+                session_id: "s1".into(),
+                success: true,
+                result: None,
+                error: None,
+                timestamp: Utc::now(),
+                usage: Usage::default(),
+                incomplete_tasks: Some(vec!["task_a".into()]),
+            }),
+        ];
+        let err =
+            get_incomplete_tasks(&events).expect_err("Should fail on mismatch with Done task");
+        assert!(matches!(err, AgentError::TaskLoadingError(_)));
+    }
+
+    #[test]
     fn test_load_agents_md() {
         let instr = "you are a helpful assistant";
         fs::write(AGENTS_MD, instr).expect("Should be able to write file");
         let loaded = load_agents_md().expect("Should be able to load AGENTS.md content");
-        assert_eq!(loaded, instr);
+        assert_eq!(loaded, Some(instr.to_string()));
     }
 }

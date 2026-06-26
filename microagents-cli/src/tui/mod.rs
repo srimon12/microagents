@@ -25,7 +25,7 @@ use std::{
 use futures_util::StreamExt;
 use ignore::WalkBuilder;
 use microagents_core::types::{AgentError, RunStream};
-use microagents_events::{AgentEventAny, DeltaType, types::ToolResult};
+use microagents_events::{AgentEventAny, DeltaType, TaskStatus, types::ToolResult};
 use ratatui::{
     Frame, Terminal,
     crossterm::{
@@ -202,6 +202,7 @@ mod theme {
     pub const TOOL_OK: Color = Color::Rgb(166, 227, 161);
     pub const TOOL_ERR: Color = Color::Rgb(243, 139, 168);
     pub const SKILL: Color = Color::Rgb(203, 166, 247); // lavender
+    pub const TASK: Color = Color::Rgb(0, 236, 128); // light green
     pub const DIM: Color = Color::Rgb(108, 112, 134);
     pub const ERROR: Color = Color::Rgb(243, 139, 168);
 }
@@ -215,6 +216,7 @@ enum Msg {
     ToolCall { name: String, input: String },
     ToolResult(ToolResult),
     Skill(String),
+    Task { name: String, status: TaskStatus },
     Session(String),
     Error(String),
 }
@@ -453,6 +455,10 @@ impl App {
                     }
                 }
             }
+            AgentEventAny::Task(t) => self.push(Msg::Task {
+                name: t.task_name,
+                status: t.task_status,
+            }),
             _ => unreachable!("AgentEventAny should not reach this branch"),
         }
     }
@@ -825,6 +831,13 @@ fn block_lines(block: &Msg) -> Vec<Line<'static>> {
             Span::styled(
                 format!("skill loaded: {}", name),
                 Style::default().fg(theme::SKILL),
+            ),
+        ])],
+        Msg::Task { name, status } => vec![Line::from(vec![
+            Span::styled("  ✧ ", Style::default().fg(theme::TASK)),
+            Span::styled(
+                format!("task: {}   status: {}", name, status),
+                Style::default().fg(theme::TASK),
             ),
         ])],
         Msg::Session(msg) => vec![Line::from(Span::styled(

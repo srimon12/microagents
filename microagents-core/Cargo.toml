@@ -1,6 +1,6 @@
 [package]
 name = "microagents-core"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
@@ -23,8 +23,8 @@ serde_json = "1.0.149"
 thiserror = "2.0.18"
 dashmap = "6"
 ultrafast-models-sdk = { version = "0.1.6", features = ["openai", "anthropic", "groq", "mistral", "cohere", "azure", "bedrock", "standalone", "ollama"] }
-microagents-events = { path = "../microagents-events", version = "0.1.0" }
-microagents-storage = { path = "../microagents-storage", version = "0.1.0" }
+microagents-events = { path = "../microagents-events", version = "0.2.0" }
+microagents-storage = { path = "../microagents-storage", version = "0.1.1" }
 async-stream = "0.3.6"
 uuid = { version = "1.23.1", features = ["v4"] }
 tokio = { version = "1.52.3", features = ["full"] }

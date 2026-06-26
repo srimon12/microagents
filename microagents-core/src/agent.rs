@@ -15,8 +15,8 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use microagents_events::{
     AgentEventAny, AssistantResponseEvent, DeltaType, SessionInitEvent, SessionInitType,
-    SessionStopEvent, SkillLoadEvent, StreamDeltaEvent, ToolCallEvent, ToolResultEvent, Usage,
-    UserPromptSubmitEvent, types::ToolResult,
+    SessionStopEvent, SkillLoadEvent, StreamDeltaEvent, TaskEvent, TaskStatus, ToolCallEvent,
+    ToolResultEvent, Usage, UserPromptSubmitEvent, types::ToolResult,
 };
 use microagents_storage::{
     jsonl::JsonlAgentStorage,
@@ -26,7 +26,10 @@ use microagents_storage::{
 };
 use serde_json::{Value, json};
 use thiserror::Error;
-use tokio::{sync::Semaphore, task::JoinSet};
+use tokio::{
+    sync::{Mutex, Semaphore},
+    task::JoinSet,
+};
 use ultrafast_models_sdk::{
     ChatRequest, CircuitBreakerConfig, Message, ProviderConfig, Role, UltrafastClient,
     cache::{CacheConfig, CacheType},
@@ -36,7 +39,7 @@ use ultrafast_models_sdk::{
 use crate::{
     common::{
         JsonResult, call_tool, check_env_var, convert_event_to_message, estimate_tokens,
-        load_agents_md, parse_json_fragment,
+        get_incomplete_tasks, load_agents_md, parse_json_fragment,
     },
     skills::{self, ensure_skill, find_skills, parse_skill},
     types::{Agent, AgentError, GenerationStream, RunStream, ToolExecutionContext, ToolFunction},
@@ -46,6 +49,8 @@ use crate::{
 pub const SKILLS_PATH: &str = ".agents/skills";
 /// Name of the built-in skill-loading tool exposed to the LLM.
 pub const SKILLS_TOOL_NAME: &str = "skills";
+/// Name of the built-in task tracking tool exposed to the LLM.
+pub const TASKS_TOOL_NAME: &str = "tasks";
 /// Path alias for the global skills directory (resolved at runtime).
 pub const GLOBAL_SKILLS_PATH: &str = "~/.agents/skills";
 /// Base system prompt injected into every conversation.
@@ -213,6 +218,7 @@ pub struct MicroAgent<Ctx> {
     pub tool_context: Arc<ToolExecutionContext<Ctx>>,
     pub storage: Box<dyn AgentStorage>,
     pub parallel_tool_calls: bool,
+    pub tasks: Arc<Mutex<HashMap<String, TaskStatus>>>,
 }
 
 impl<Ctx: Debug> Debug for MicroAgent<Ctx> {
@@ -264,10 +270,16 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     /// The `skills` tool is registered automatically.
     pub fn new(tool_context: ToolExecutionContext<Ctx>) -> Self {
         Self {
-            tools: HashMap::from([(
-                "skills".to_string(),
-                Arc::new(SkillsTool) as Arc<dyn ToolFunction<Ctx>>,
-            )]),
+            tools: HashMap::from([
+                (
+                    SKILLS_TOOL_NAME.to_string(),
+                    Arc::new(SkillsTool) as Arc<dyn ToolFunction<Ctx>>,
+                ),
+                (
+                    TASKS_TOOL_NAME.to_string(),
+                    Arc::new(TasksTool) as Arc<dyn ToolFunction<Ctx>>,
+                ),
+            ]),
             skills: HashMap::new(),
             provider: SupportedProvider::default(),
             model: String::new(),
@@ -360,7 +372,9 @@ impl<Ctx: Send + Sync + 'static> MicroAgentBuilder<Ctx> {
     /// Load custom instructions from an AGENTS.md file in the current repository
     pub fn load_agents_md(mut self) -> Result<Self, MicroAgentBuilderError> {
         let instructions = load_agents_md()?;
-        self.custom_instructions += &instructions;
+        if let Some(instr) = instructions {
+            self.custom_instructions += &instr;
+        }
         Ok(self)
     }
 
@@ -460,6 +474,7 @@ You are {} provided by {}
             tool_context: self.tool_context,
             storage: self.storage,
             parallel_tool_calls: self.parallel_tool_calls,
+            tasks: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 }
@@ -614,6 +629,10 @@ impl<Ctx> MicroAgent<Ctx> {
 #[derive(Debug)]
 pub struct SkillsTool;
 
+/// Built-in tool that track agent tasks
+#[derive(Debug)]
+pub struct TasksTool;
+
 #[async_trait::async_trait]
 impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
     fn name(&self) -> &'static str {
@@ -656,6 +675,56 @@ impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for SkillsTool {
         }
         Ok(ToolResult::Err(format!(
             "Skill {skill_name} could not be found"
+        )))
+    }
+}
+
+#[async_trait::async_trait]
+impl<Ctx: Send + Sync + 'static> ToolFunction<Ctx> for TasksTool {
+    fn name(&self) -> &'static str {
+        TASKS_TOOL_NAME
+    }
+
+    fn description(&self) -> &'static str {
+        "Tool for tracking and updating tasks throughout a session"
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+          "type": "object",
+          "required": [
+            "task_name",
+            "task_status"
+          ],
+          "properties": {
+            "task_name": {
+              "type": "string",
+              "description": "Name of the task you are about to work on/currently working on/done with"
+            },
+            "task_status": {
+              "type": "string",
+              "enum": ["Queued", "InProgress", "Done"],
+              "description": "Status of the task"
+            }
+          }
+        })
+    }
+
+    async fn execute(
+        &self,
+        input: Value,
+        _ctx: &Arc<ToolExecutionContext<Ctx>>,
+    ) -> Result<ToolResult, AgentError> {
+        let task_name = input["task_name"]
+            .as_str()
+            .ok_or_else(|| AgentError::ToolCallError("missing task_name".into()))?;
+        let task_status = &input["task_status"];
+        let ts: TaskStatus = serde_json::from_value(task_status.to_owned())
+            .map_err(|_| AgentError::ToolCallError("invalid task status".into()))?;
+
+        Ok(ToolResult::Ok(format!(
+            "Successfully recorded task {} with status {}",
+            task_name, ts
         )))
     }
 }
@@ -734,6 +803,16 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                         return;
                     }
                 };
+
+                let incompl_tasks_res = get_incomplete_tasks(&events);
+                let incomplete_tasks = match incompl_tasks_res {
+                    Ok(t) => t,
+                    Err(e) => {
+                        yield Err(e);
+                        return;
+                    }
+                };
+                self.tasks = Arc::new(Mutex::new(incomplete_tasks));
 
                 resolved_sid = sid;
 
@@ -850,6 +929,13 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             let stop_ev = AgentEventAny::SessionStop(SessionStopEvent { session_id: resolved_sid.clone(), success: false, result: None, error: Some(e.to_string()), timestamp: Utc::now(), usage: Usage {
                                 latency,
                                 ..Default::default()
+                            }, incomplete_tasks: {
+                                let ts = self.tasks.lock().await;
+                                if ts.is_empty() {
+                                    None
+                                } else {
+                                    Some(ts.keys().map(|k| k.to_string()).collect())
+                                }
                             }});
                             match self.storage.update_session(stop_ev.clone()).await {
                                 Ok(_) => {},
@@ -887,6 +973,14 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             input_chars: input_text.len(),
                             estimated_output_tokens: output_tokens,
                             estimated_input_tokens: input_tokens,
+                        },
+                        incomplete_tasks: {
+                            let ts = self.tasks.lock().await;
+                            if ts.is_empty() {
+                                None
+                            } else {
+                                Some(ts.keys().map(|k| k.to_string()).collect())
+                            }
                         }
                     });
                     match self.storage.update_session(ev.clone()).await {
@@ -923,7 +1017,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                             let tool = local_tools.get(name);
                             if let Some(t) = tool {
                                 let tool_name = name.clone();
-                                let tc_ev = if tool_name != SKILLS_TOOL_NAME {
+                                let tc_ev = if tool_name != SKILLS_TOOL_NAME && tool_name != TASKS_TOOL_NAME {
                                     AgentEventAny::ToolCall(ToolCallEvent {
                                         session_id: resolved_sid.clone(),
                                         turn_id: turn_id.clone(),
@@ -931,7 +1025,7 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                         input: v.clone(),
                                         timestamp: Utc::now(),
                                     })
-                                } else {
+                                } else if tool_name == SKILLS_TOOL_NAME {
                                     match v["skill_name"].as_str() {
                                         Some(n) => AgentEventAny::SkillLoad(SkillLoadEvent {
                                             session_id: resolved_sid.clone(),
@@ -944,6 +1038,34 @@ impl<Ctx: Send + Sync + 'static> Agent for MicroAgent<Ctx> {
                                             return;
                                         }
                                     }
+                                } else {
+                                    let tn = match v["task_name"].as_str() {
+                                        Some(n) => n,
+                                        None => {
+                                            yield Err(AgentError::RunError("Task name is not a string".to_string()));
+                                            return;
+                                        }
+                                    };
+                                    let ts: TaskStatus = match serde_json::from_value(v["task_status"].to_owned()) {
+                                        Ok(v) => v,
+                                        Err(_) => {
+                                            yield Err(AgentError::RunError("Invalid type for task status".to_string()));
+                                            return;
+                                        }
+                                    };
+                                    let mut tasks = self.tasks.lock().await;
+                                    if ts == TaskStatus::Done {
+                                        tasks.remove(tn);
+                                    } else {
+                                        tasks.entry(tn.to_string()).and_modify(|v| *v = ts).or_insert(ts);
+                                    }
+                                    AgentEventAny::Task(TaskEvent {
+                                        session_id: resolved_sid.clone(),
+                                        turn_id: turn_id.clone(),
+                                        task_name: tn.to_string(),
+                                        task_status: ts,
+                                        timestamp: Utc::now(),
+                                    })
                                 };
                                 match self.storage.update_session(tc_ev.clone()).await {
                                     Ok(_) => {},
@@ -1166,10 +1288,11 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_default_tools_contains_skills_tool() {
+    fn test_builder_default_tools_contains_skills_and_tasks_tool() {
         let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()));
         assert!(builder.tools.contains_key("skills"));
-        assert_eq!(builder.tools.len(), 1);
+        assert!(builder.tools.contains_key("tasks"));
+        assert_eq!(builder.tools.len(), 2);
     }
 
     #[test]
@@ -1237,7 +1360,7 @@ mod tests {
         let builder = MicroAgentBuilder::new(ToolExecutionContext::new(()))
             .add_tool(Arc::new(DummyTool))
             .unwrap();
-        assert_eq!(builder.tools.len(), 2);
+        assert_eq!(builder.tools.len(), 3);
         assert!(builder.tools.contains_key("dummy"));
     }
 
@@ -1292,7 +1415,7 @@ mod tests {
             .unwrap()
             .build()
             .expect("Should be able to build the agent");
-        assert_eq!(agent.tools.len(), 2);
+        assert_eq!(agent.tools.len(), 3);
     }
 
     #[test]
