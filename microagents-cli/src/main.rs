@@ -46,6 +46,10 @@ struct Args {
     #[arg(long = "session-id", value_name = "ID")]
     session_id: Option<String>,
 
+    /// Fork a previous session by id, creating a new session with cloned history.
+    #[arg(long = "fork", value_name = "ID")]
+    fork: Option<String>,
+
     /// Prompt to run in headless mode.
     #[arg(long, short, default_value = None)]
     prompt: Option<String>,
@@ -117,14 +121,61 @@ async fn build_agent(
     Ok(base_builder.build()?)
 }
 
+async fn fork_session(
+    parent_id: &str,
+    storage_opt: Option<String>,
+) -> Result<String, AgentError> {
+    let storage = build_storage(storage_opt).await?;
+    let parent_events = storage
+        .get_session(parent_id)
+        .await
+        .map_err(|e| AgentError::SessionLoadError(format!("Failed to load parent session: {}", e)))?;
+
+    if parent_events.is_empty() {
+        return Err(AgentError::SessionLoadError(format!("Parent session {} has no events or does not exist", parent_id)));
+    }
+
+    let new_sid = uuid::Uuid::new_v4().to_string();
+
+    for event in parent_events {
+        let cloned_event = event.with_session_id(new_sid.clone());
+        match cloned_event {
+            microagents_events::AgentEventAny::SessionInit(init_event) => {
+                storage.create_session(init_event).await.map_err(|e| {
+                    AgentError::RunError(format!("Failed to write forked session init: {}", e))
+                })?;
+            }
+            other => {
+                storage.update_session(other).await.map_err(|e| {
+                    AgentError::RunError(format!("Failed to write forked event: {}", e))
+                })?;
+            }
+        }
+    }
+
+    Ok(new_sid)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    let resolved_session_id = if let Some(parent_id) = &args.fork {
+        let new_sid = fork_session(parent_id, args.storage.clone()).await?;
+        if args.prompt.is_none() && args.session_id.is_none() {
+            println!("Cloned session: {}", new_sid);
+            return Ok(());
+        }
+        Some(new_sid)
+    } else {
+        args.session_id.clone()
+    };
+
     if let Some(p) = args.prompt {
         initialize_environment(args.verbose).await?;
         let agent = build_agent(args.provider, args.model, args.storage, args.skill).await?;
         let mut stream = agent
-            .run(p, args.session_id)
+            .run(p, resolved_session_id)
             .await
             .map_err(|e| e.to_string())?;
         while let Some(ev) = stream.next().await {
@@ -151,7 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // and that things did not just randomly freeze
     initialize_environment(true).await?;
     println!("Launching TUI...");
-    let initial_session = args.session_id.clone();
+    let initial_session = resolved_session_id.clone();
     let load_history_storage = args.storage.clone();
     tui::run_with_session(
         initial_session,
