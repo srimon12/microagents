@@ -153,6 +153,15 @@ async fn fork_session(
         }
     }
 
+    let fork_event = microagents_events::types::SessionForkEvent {
+        session_id: new_sid.clone(),
+        parent_session_id: parent_id.to_string(),
+        timestamp: chrono::Utc::now(),
+    };
+    storage.update_session(microagents_events::AgentEventAny::SessionFork(fork_event)).await.map_err(|e| {
+        AgentError::RunError(format!("Failed to write session fork event: {}", e))
+    })?;
+
     Ok(new_sid)
 }
 
@@ -162,10 +171,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let resolved_session_id = if let Some(parent_id) = &args.fork {
         let new_sid = fork_session(parent_id, args.storage.clone()).await?;
-        if args.prompt.is_none() && args.session_id.is_none() {
-            println!("Cloned session: {}", new_sid);
-            return Ok(());
-        }
         Some(new_sid)
     } else {
         args.session_id.clone()

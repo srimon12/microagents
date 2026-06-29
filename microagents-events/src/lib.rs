@@ -183,6 +183,24 @@ pub struct TaskEvent {
     pub timestamp: DateTime<Utc>,
 }
 
+/// Event emitted when a session is forked from a parent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionForkEvent {
+    pub session_id: String,
+    pub parent_session_id: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+impl AgentEvent for SessionForkEvent {
+    fn to_jsonrpc(&self) -> JsonRpcNotification {
+        serialize_to_jsonrpc("session.fork", self)
+    }
+
+    fn session_id(&self) -> String {
+        self.session_id.clone()
+    }
+}
+
 fn serialize_to_jsonrpc<T: Serialize>(method: &str, params_struct: &T) -> JsonRpcNotification {
     let params_value = serde_json::to_value(params_struct).expect("Event params serialization failed");
     let params = match params_value {
@@ -309,6 +327,8 @@ pub enum AgentEventAny {
     UserPromptSubmit(UserPromptSubmitEvent),
     #[serde(rename = "assistant.task")]
     Task(TaskEvent),
+    #[serde(rename = "session.fork")]
+    SessionFork(SessionForkEvent),
 }
 
 impl AgentEventAny {
@@ -323,6 +343,7 @@ impl AgentEventAny {
             Self::ToolCall(s) => s.timestamp,
             Self::ToolResult(s) => s.timestamp,
             Self::Task(s) => s.timestamp,
+            Self::SessionFork(s) => s.timestamp,
         }
     }
 
@@ -337,6 +358,7 @@ impl AgentEventAny {
             Self::ToolCall(s) => s.session_id = sid,
             Self::ToolResult(s) => s.session_id = sid,
             Self::Task(s) => s.session_id = sid,
+            Self::SessionFork(s) => s.session_id = sid,
         }
         self
     }
@@ -354,6 +376,7 @@ impl AgentEvent for AgentEventAny {
             Self::SkillLoad(e) => e.to_jsonrpc(),
             Self::UserPromptSubmit(e) => e.to_jsonrpc(),
             Self::Task(e) => e.to_jsonrpc(),
+            Self::SessionFork(e) => e.to_jsonrpc(),
         }
     }
 
@@ -368,6 +391,7 @@ impl AgentEvent for AgentEventAny {
             Self::ToolResult(s) => s.session_id.clone(),
             Self::UserPromptSubmit(s) => s.session_id.clone(),
             Self::Task(s) => s.session_id.clone(),
+            Self::SessionFork(s) => s.session_id.clone(),
         }
     }
 }
@@ -832,6 +856,22 @@ mod tests {
         let any = AgentEventAny::try_from(rpc).unwrap();
         assert!(
             matches!(any, AgentEventAny::Task(ref e) if e.task_name == "test" && e.task_status == TaskStatus::Done)
+        );
+    }
+
+    #[test]
+    fn try_from_jsonrpc_session_fork_ok() {
+        let rpc = JsonRpcNotification::builder()
+            .method("session.fork".into())
+            .add_param("session_id".into(), Value::from("s1"))
+            .add_param("parent_session_id".into(), Value::from("parent1"))
+            .add_param("timestamp".into(), {
+                let tms = Utc::now();
+                serde_json::to_value(tms).expect("Should convert to value")
+            });
+        let any = AgentEventAny::try_from(rpc).unwrap();
+        assert!(
+            matches!(any, AgentEventAny::SessionFork(ref e) if e.session_id == "s1" && e.parent_session_id == "parent1")
         );
     }
 
