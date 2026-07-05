@@ -8,7 +8,7 @@ use std::{convert::TryFrom, fmt};
 
 use crate::types::{AgentEvent, AgentEventError, JsonRpcNotification, ToolCall, ToolResult};
 
-pub const EVENTS_PROTOCOL_VERSION: &str = "0.2.0";
+pub const EVENTS_PROTOCOL_VERSION: &str = "0.3.0";
 
 /// Indicates whether a session is being started fresh or resumed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,10 +202,14 @@ impl AgentEvent for SessionForkEvent {
 }
 
 fn serialize_to_jsonrpc<T: Serialize>(method: &str, params_struct: &T) -> JsonRpcNotification {
-    let params_value = serde_json::to_value(params_struct).expect("Event params serialization failed");
+    let params_value =
+        serde_json::to_value(params_struct).expect("Event params serialization failed");
     let params = match params_value {
         Value::Object(m) => m,
-        other => panic!("Serialized event params must be a JSON Object, found: {:?}", other),
+        other => panic!(
+            "Serialized event params must be a JSON Object, found: {:?}",
+            other
+        ),
     };
     JsonRpcNotification {
         jsonrpc: "2.0".to_string(),

@@ -121,18 +121,17 @@ async fn build_agent(
     Ok(base_builder.build()?)
 }
 
-async fn fork_session(
-    parent_id: &str,
-    storage_opt: Option<String>,
-) -> Result<String, AgentError> {
+async fn fork_session(parent_id: &str, storage_opt: Option<String>) -> Result<String, AgentError> {
     let storage = build_storage(storage_opt).await?;
-    let parent_events = storage
-        .get_session(parent_id)
-        .await
-        .map_err(|e| AgentError::SessionLoadError(format!("Failed to load parent session: {}", e)))?;
+    let parent_events = storage.get_session(parent_id).await.map_err(|e| {
+        AgentError::SessionLoadError(format!("Failed to load parent session: {}", e))
+    })?;
 
     if parent_events.is_empty() {
-        return Err(AgentError::SessionLoadError(format!("Parent session {} has no events or does not exist", parent_id)));
+        return Err(AgentError::SessionLoadError(format!(
+            "Parent session {} has no events or does not exist",
+            parent_id
+        )));
     }
 
     let new_sid = uuid::Uuid::new_v4().to_string();
@@ -153,14 +152,15 @@ async fn fork_session(
         }
     }
 
-    let fork_event = microagents_events::types::SessionForkEvent {
+    let fork_event = microagents_events::SessionForkEvent {
         session_id: new_sid.clone(),
         parent_session_id: parent_id.to_string(),
         timestamp: chrono::Utc::now(),
     };
-    storage.update_session(microagents_events::AgentEventAny::SessionFork(fork_event)).await.map_err(|e| {
-        AgentError::RunError(format!("Failed to write session fork event: {}", e))
-    })?;
+    storage
+        .update_session(microagents_events::AgentEventAny::SessionFork(fork_event))
+        .await
+        .map_err(|e| AgentError::RunError(format!("Failed to write session fork event: {}", e)))?;
 
     Ok(new_sid)
 }
