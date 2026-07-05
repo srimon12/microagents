@@ -137,6 +137,9 @@ async fn fork_session(parent_id: &str, storage_opt: Option<String>) -> Result<St
     let new_sid = uuid::Uuid::new_v4().to_string();
 
     for event in parent_events {
+        if matches!(&event, microagents_events::AgentEventAny::SessionFork(_)) {
+            continue;
+        }
         let cloned_event = event.with_session_id(new_sid.clone());
         match cloned_event {
             microagents_events::AgentEventAny::SessionInit(init_event) => {
@@ -170,6 +173,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let resolved_session_id = if let Some(parent_id) = &args.fork {
+        if args.session_id.is_some() {
+            return Err(
+                "--fork-id and --session-id are mutually exclusive: only provide one of the two."
+                    .into(),
+            );
+        }
         let new_sid = fork_session(parent_id, args.storage.clone()).await?;
         Some(new_sid)
     } else {
